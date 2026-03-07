@@ -271,16 +271,16 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
   }
 
   return (
-    <div className="h-full overflow-auto bg-gray-50">
-      <div className="bg-white border-b px-6 py-4 flex items-center space-x-4">
-        <Button variant="ghost" size="icon" onClick={onBack}>
+    <div className="h-full overflow-auto bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
+      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-6 py-4 flex items-center space-x-4">
+        <Button variant="ghost" size="icon" onClick={onBack} className="dark:text-gray-300 dark:hover:text-white">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex items-center space-x-3">
           <div className="w-4 h-4 rounded" style={{ backgroundColor: subject.color }}></div>
-          <h1 className="text-2xl font-bold">{subject.name}</h1>
+          <h1 className="text-2xl font-bold dark:text-white">{subject.name}</h1>
         </div>
-        <div className="ml-auto text-lg font-semibold">
+        <div className="ml-auto text-lg font-semibold dark:text-gray-200">
           Promedio: {calculateWeightedAverage()}
         </div>
       </div>
@@ -292,20 +292,20 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
           const isAddingTopic = addingTopicForGrade === grade.id;
 
           return (
-            <Card key={grade.id}>
+            <Card key={grade.id} className="dark:bg-slate-900 dark:border-slate-800">
               <CardHeader className="cursor-pointer" onClick={() => toggleGradeExpansion(grade.id)}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-                    <CardTitle>{grade.title}</CardTitle>
+                    {isExpanded ? <ChevronDown className="h-5 w-5 dark:text-gray-400" /> : <ChevronRight className="h-5 w-5 dark:text-gray-400" />}
+                    <CardTitle className="dark:text-gray-100">{grade.title}</CardTitle>
                   </div>
                   <div className="flex items-center space-x-4">
                     {grade.exam_date && (
-                      <span className="text-sm text-gray-500">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
                         {new Date(grade.exam_date).toLocaleDateString('es-ES')}
                       </span>
                     )}
-                    <span className="text-lg font-bold">
+                    <span className="text-lg font-bold dark:text-gray-200">
                       {grade.score > 0 ? `${grade.score} (${grade.weight}%)` : '-'}
                     </span>
                   </div>
@@ -316,32 +316,35 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                     <div>
-                      <Label>Nota</Label>
+                      <Label className="dark:text-gray-300">Nota</Label>
                       <Input
                         type="number"
                         step="0.1"
                         value={draftGrades[grade.id]?.score ?? ''}
                         onChange={(e) => handleDraftChange(grade.id, 'score', e.target.value)}
                         placeholder="1.0-7.0"
+                        className="dark:bg-slate-950 dark:border-slate-800 dark:text-white"
                       />
                     </div>
                     <div>
-                      <Label>Ponderación %</Label>
+                      <Label className="dark:text-gray-300">Ponderación %</Label>
                       <Input
                         type="number"
                         step="0.1"
                         value={draftGrades[grade.id]?.weight ?? ''}
                         onChange={(e) => handleDraftChange(grade.id, 'weight', e.target.value)}
                         placeholder="%"
+                        className="dark:bg-slate-950 dark:border-slate-800 dark:text-white"
                       />
                     </div>
                     <div>
-                      <Label>Fecha (dd/mm)</Label>
+                      <Label className="dark:text-gray-300">Fecha (dd/mm)</Label>
                       <Input
                         type="text"
                         value={draftGrades[grade.id]?.exam_date ?? ''}
                         onChange={(e) => handleDraftChange(grade.id, 'exam_date', e.target.value)}
                         placeholder="15/03"
+                        className="dark:bg-slate-950 dark:border-slate-800 dark:text-white"
                       />
                     </div>
                     <div>
@@ -356,9 +359,9 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
                     </div>
                   </div>
 
-                  <div className="mt-4 border-t pt-4">
+                  <div className="mt-4 border-t dark:border-slate-800 pt-4">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold">Temario</h4>
+                      <h4 className="font-semibold dark:text-gray-200">Temario</h4>
                       <Button
                         size="sm"
                         variant="outline"
@@ -372,13 +375,13 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
 
                     <div className="space-y-2">
                       {gradeChecklists.map(item => (
-                        <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-slate-800/50 rounded border dark:border-slate-800">
                           <div className="flex items-center space-x-2 flex-1">
                             <Checkbox
                               checked={item.is_completed}
                               onCheckedChange={() => toggleTopic(item.id, item.is_completed)}
                             />
-                            <span className={item.is_completed ? 'line-through text-gray-500' : ''}>
+                            <span className={item.is_completed ? 'line-through text-gray-500 dark:text-gray-600' : 'dark:text-gray-200'}>
                               {item.topic}
                             </span>
                           </div>
@@ -389,7 +392,7 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
                       ))}
 
                       {isAddingTopic && (
-                        <div className="flex items-center p-2 bg-blue-50 border border-blue-200 rounded">
+                        <div className="flex items-center p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded">
                           <Checkbox disabled className="opacity-50" />
                           <Input
                             ref={inputRef}
@@ -408,7 +411,7 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
                                 setAddingTopicForGrade(null);
                               }
                             }}
-                            className="ml-2 border-none bg-transparent focus:ring-0"
+                            className="ml-2 border-none bg-transparent focus:ring-0 dark:text-gray-200 dark:placeholder-gray-500"
                           />
                         </div>
                       )}

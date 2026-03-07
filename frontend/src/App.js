@@ -32,21 +32,25 @@ function Dashboard() {
   const [currentView, setCurrentView] = useState('horario');
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [selectedExam, setSelectedExam] = useState(null);
+  const [showReminders, setShowReminders] = useState(false);
 
   const handleNavigate = (view) => {
     setCurrentView(view);
     setSelectedSubject(null);
     setSelectedExam(null);
+    setShowReminders(false);
   };
 
   const handleSelectSubject = (subjectId) => {
     setSelectedSubject(subjectId);
     setSelectedExam(null);
+    setShowReminders(false);
   };
 
   const handleSelectExam = (subjectId, examId) => {
     setSelectedSubject(subjectId);
     setSelectedExam(examId);
+    setShowReminders(false);
   };
 
   const handleBackFromSubject = () => {
@@ -55,14 +59,16 @@ function Dashboard() {
   };
 
   return (
-    <NewLayout 
-      currentView={currentView} 
+    <NewLayout
+      currentView={currentView}
       onNavigate={handleNavigate}
       onSelectExam={handleSelectExam}
+      showReminders={showReminders}
+      setShowReminders={setShowReminders}
     >
       {selectedSubject ? (
-        <SubjectDetail 
-          subjectId={selectedSubject} 
+        <SubjectDetail
+          subjectId={selectedSubject}
           onBack={handleBackFromSubject}
           initialExpandedExam={selectedExam}
         />

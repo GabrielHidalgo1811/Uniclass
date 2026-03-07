@@ -37,7 +37,7 @@ const SubjectsView = ({ onSelectSubject }) => {
         .select('*')
         .eq('user_id', user.id)
         .order('name');
-      
+
       if (error) throw error;
       setSubjects(data || []);
     } catch (error) {
@@ -54,7 +54,7 @@ const SubjectsView = ({ onSelectSubject }) => {
         .delete()
         .eq('id', subjectId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
       toast.success('Ramo eliminado exitosamente');
       setDeleteConfirm(null);
@@ -66,48 +66,50 @@ const SubjectsView = ({ onSelectSubject }) => {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-lg text-gray-500">Cargando...</div>
+      <div className="h-full flex items-center justify-center bg-white dark:bg-slate-950">
+        <div className="text-lg text-gray-500 dark:text-gray-400">Cargando...</div>
       </div>
     );
   }
 
   return (
     <>
-      <div className="h-full overflow-auto p-6">
+      <div className="h-full overflow-auto p-6 bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6">Mis Ramos</h1>
-          
+          <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Mis Ramos</h1>
+
           {subjects.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-500">
+            <Card className="dark:bg-slate-900/50 dark:border-slate-800">
+              <CardContent className="py-12 text-center text-gray-500 dark:text-gray-400">
                 No tienes ramos registrados aún.
                 <br />
                 Agrégalos desde la vista de Horario.
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
               {subjects.map(subject => (
                 <Card
                   key={subject.id}
-                  className="relative group hover:shadow-lg transition-shadow"
+                  className="relative group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 dark:bg-slate-900 dark:border-slate-800 overflow-hidden"
                   data-testid="subject-card"
                 >
-                  <div 
-                    className="cursor-pointer"
+                  {/* Subtle color accent line at the top of the card */}
+                  <div className="h-1.5 w-full" style={{ backgroundColor: subject.color }}></div>
+                  <div
+                    className="cursor-pointer p-1"
                     onClick={() => onSelectSubject(subject.id)}
                   >
-                    <CardHeader className="pb-3">
+                    <CardHeader className="pb-3 pt-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 flex-1">
                           <div
-                            className="w-4 h-4 rounded-full flex-shrink-0"
+                            className="w-5 h-5 rounded-full flex-shrink-0 shadow-sm border border-black/10 dark:border-white/10"
                             style={{ backgroundColor: subject.color }}
                           />
-                          <CardTitle className="text-lg">{subject.name}</CardTitle>
+                          <CardTitle className="text-lg font-bold text-gray-900 dark:text-slate-100">{subject.name}</CardTitle>
                         </div>
-                        <ChevronRight className="h-5 w-5 text-gray-400" />
+                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-primary transition-colors" />
                       </div>
                     </CardHeader>
                   </div>
@@ -131,10 +133,10 @@ const SubjectsView = ({ onSelectSubject }) => {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="dark:bg-slate-900 dark:border-slate-800">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar {deleteConfirm?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="dark:text-white">¿Eliminar {deleteConfirm?.name}?</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-gray-400">
               Esta acción eliminará el ramo y todas sus clases, pruebas y temarios asociados.
               Esta acción no se puede deshacer.
             </AlertDialogDescription>

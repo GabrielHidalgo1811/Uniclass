@@ -25,13 +25,13 @@ const COLORS = [
 
 const CLASS_TYPES = ['Teoría', 'Ayudantía', 'Laboratorio'];
 
-const AddClassModal = ({ onClose, onSuccess }) => {
+const AddClassModal = ({ onClose, onSuccess, initialDay = '0', initialStartTime = '', initialEndTime = '' }) => {
   const { user } = useAuth();
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLORS[0]);
-  const [selectedDay, setSelectedDay] = useState('0');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [selectedDay, setSelectedDay] = useState(initialDay);
+  const [startTime, setStartTime] = useState(initialStartTime);
+  const [endTime, setEndTime] = useState(initialEndTime);
   const [room, setRoom] = useState('');
   const [professor, setProfessor] = useState('');
   const [classType, setClassType] = useState('Teoría');
@@ -124,9 +124,8 @@ const AddClassModal = ({ onClose, onSuccess }) => {
                 <button
                   key={c}
                   type="button"
-                  className={`w-10 h-10 rounded-lg border-2 transition-all hover:scale-110 ${
-                    color === c ? 'border-gray-800 ring-2 ring-gray-400' : 'border-gray-300'
-                  }`}
+                  className={`w-10 h-10 rounded-lg border-2 transition-all hover:scale-110 ${color === c ? 'border-gray-800 ring-2 ring-gray-400' : 'border-gray-300'
+                    }`}
                   style={{ backgroundColor: c }}
                   onClick={() => setColor(c)}
                 />

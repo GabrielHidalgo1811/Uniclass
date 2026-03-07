@@ -22,6 +22,8 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   const [events, setEvents] = useState([]);
   const [showClassModal, setShowClassModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [modalInitialData, setModalInitialData] = useState({ day: '0', startTime: '', endTime: '' });
+  const [resizingClass, setResizingClass] = useState(null);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
 
@@ -66,6 +68,12 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   const timeToMinutes = (timeStr) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours * 60 + minutes;
+  };
+
+  const formatTimeFromMinutes = (mins) => {
+    const h = Math.floor(mins / 60);
+    const m = Math.floor(mins % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`;
   };
 
   const getClassesForDay = (dayIndex) => {
@@ -155,9 +163,9 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white dark:bg-slate-950">
       {/* Header */}
-      <div className="border-b px-6 py-4 flex items-center justify-between">
+      <div className="border-b dark:border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, -7))}>
@@ -175,7 +183,10 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
           </Button>
         </div>
         <div className="flex space-x-2">
-          <Button onClick={() => setShowClassModal(true)}>
+          <Button onClick={() => {
+            setModalInitialData({ day: '0', startTime: '', endTime: '' });
+            setShowClassModal(true);
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Agregar Clase
           </Button>
@@ -190,11 +201,11 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
       <div className="flex-1 overflow-auto">
         <div className="flex min-w-max">
           {/* Time column */}
-          <div className="w-16 flex-shrink-0 border-r bg-gray-50">
-            <div className="h-16 border-b"></div>
+          <div className="w-16 flex-shrink-0 border-r dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50">
+            <div className="h-16 border-b dark:border-slate-800"></div>
             {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i).map(hour => (
-              <div key={hour} className="h-[60px] border-b flex items-start justify-end pr-2 pt-1">
-                <span className="text-xs text-gray-500">{hour}:00</span>
+              <div key={hour} className="h-[60px] border-b dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
+                <span className="text-xs text-gray-500 dark:text-gray-400">{hour}:00</span>
               </div>
             ))}
           </div>
@@ -206,20 +217,46 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
             const dayEvents = getEventsForDay(dayIndex);
 
             return (
-              <div key={dayIndex} className="flex-1 min-w-[140px] border-r last:border-r-0">
+              <div key={dayIndex} className="flex-1 min-w-[140px] border-r dark:border-slate-800 last:border-r-0">
                 {/* Day header */}
-                <div className="h-16 border-b flex flex-col items-center justify-center bg-white">
-                  <div className="text-xs text-gray-500 uppercase font-medium">{day.substring(0, 3)}</div>
-                  <div className="text-2xl font-bold mt-1">{format(dayDate, 'd')}</div>
+                <div className="h-16 border-b dark:border-slate-800 flex flex-col items-center justify-center bg-white dark:bg-slate-950">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 uppercase font-medium">{day.substring(0, 3)}</div>
+                  <div className="text-2xl font-bold mt-1 dark:text-gray-200">{format(dayDate, 'd')}</div>
                 </div>
 
                 {/* Day content */}
                 <div
-                  className="relative"
+                  className="relative group cursor-pointer"
                   style={{ height: `${(END_HOUR - START_HOUR) * HOUR_HEIGHT}px` }}
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onClick={(e) => {
+                    // Solo activar si se hace clic en el fondo, no en una clase/evento
+                    if (e.target !== e.currentTarget) return;
+
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickY = e.clientY - rect.top;
+
+                    let clickedMinutes = (clickY / HOUR_HEIGHT) * 60 + (START_HOUR * 60);
+                    clickedMinutes = Math.floor(clickedMinutes / 30) * 30; // Snap to 30 mins
+
+                    const formatTime = (mins) => {
+                      const h = Math.floor(mins / 60);
+                      const m = Math.floor(mins % 60);
+                      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                    };
+
+                    const startTime = formatTime(clickedMinutes);
+                    const endTime = formatTime(clickedMinutes + 90); // Default 1.5h duration
+
+                    setModalInitialData({
+                      day: dayIndex.toString(),
+                      startTime,
+                      endTime
+                    });
+                    setShowClassModal(true);
                   }}
                   onDrop={async (e) => {
                     e.preventDefault();
@@ -308,49 +345,205 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                 >
                   {/* Hour lines */}
                   {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
-                    <div key={i} className="absolute w-full border-b border-gray-100" style={{ top: `${i * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }} />
-                  ))}
-
-                  {/* Classes */}
-                  {dayClasses.map((cls, idx) => (
-                    <div
-                      key={`class-${idx}`}
-                      className="absolute left-1 right-1 rounded-lg shadow-sm cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
-                      style={{
-                        top: `${cls.top}px`,
-                        height: `${cls.height}px`,
-                        backgroundColor: cls.subject?.color || '#b4d5c8'
-                      }}
-                      onClick={() => onSubjectClick && onSubjectClick(cls.subject_id)}
-                      data-testid="calendar-class-item"
-                      draggable={true}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', JSON.stringify({
-                          type: 'class',
-                          id: cls.id,
-                          durationMinutes: timeToMinutes(cls.end_time) - timeToMinutes(cls.start_time)
-                        }));
-                      }}
-                    >
-                      <div className="p-2 h-full flex flex-col relative pointer-events-none">
-                        {/* Badge en superior derecho */}
-                        {cls.class_type && (
-                          <div className="absolute top-1 right-1 pointer-events-auto">
-                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${getClassTypeBadgeColor(cls.class_type)}`}>
-                              {cls.class_type}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="font-semibold text-sm text-gray-900 leading-tight pr-16">{cls.subject?.name}</div>
-                        <div className="text-xs text-gray-700 mt-1">
-                          {cls.start_time.substring(0, 5)} - {cls.end_time.substring(0, 5)}
-                        </div>
-                        {cls.room && <div className="text-xs text-gray-700">{cls.room}</div>}
-                        {cls.professor && <div className="text-xs text-gray-700">{cls.professor}</div>}
+                    <div key={i} className="absolute w-full border-b border-gray-100 dark:border-slate-800/60 pointer-events-none" style={{ top: `${i * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}>
+                      {/* Hover indicator for adding new class */}
+                      <div className="hidden group-hover:flex w-full h-full items-center justify-center bg-gray-50/50 dark:bg-slate-800/30 opacity-0 hover:opacity-100 transition-opacity">
+                        <Plus className="h-6 w-6 text-gray-400 dark:text-gray-500" />
                       </div>
                     </div>
                   ))}
+
+                  {/* Classes */}
+                  {dayClasses.map((cls, idx) => {
+                    // Check if this class is currently being resized
+                    const isResizing = resizingClass?.id === cls.id;
+                    const displayTop = isResizing && resizingClass.type === 'top' ? resizingClass.newTop : cls.top;
+                    const displayHeight = isResizing ? resizingClass.newHeight : cls.height;
+
+                    // Format time for tooltip while resizing
+                    let timeDisplay = `${cls.start_time.substring(0, 5)} - ${cls.end_time.substring(0, 5)}`;
+                    if (isResizing) {
+                      const newStartMins = (displayTop / HOUR_HEIGHT) * 60 + (START_HOUR * 60);
+                      const newEndMins = newStartMins + (displayHeight / HOUR_HEIGHT) * 60;
+                      timeDisplay = `${formatTimeFromMinutes(newStartMins).substring(0, 5)} - ${formatTimeFromMinutes(newEndMins).substring(0, 5)}`;
+                    }
+
+                    return (
+                      <div
+                        key={`class-${idx}`}
+                        className={`absolute left-1 right-1 rounded-lg shadow-sm group ${!isResizing ? 'cursor-move hover:shadow-md transition-shadow' : 'z-50 ring-2 ring-primary'} overflow-hidden flex flex-col`}
+                        style={{
+                          top: `${displayTop}px`,
+                          height: `${displayHeight}px`,
+                          backgroundColor: cls.subject?.color || '#b4d5c8',
+                          opacity: isResizing ? 0.9 : 1
+                        }}
+                        onClick={(e) => {
+                          // Don't trigger if we are clicking handles or resizing
+                          if (e.target.closest('.resize-handle') || isResizing) return;
+                          if (onSubjectClick) onSubjectClick(cls.subject_id);
+                        }}
+                        data-testid="calendar-class-item"
+                        draggable={!isResizing}
+                        onDragStart={(e) => {
+                          if (isResizing) {
+                            e.preventDefault();
+                            return;
+                          }
+                          // Use basic drag for moving the whole block
+                          e.dataTransfer.setData('text/plain', JSON.stringify({
+                            type: 'class',
+                            id: cls.id,
+                            durationMinutes: timeToMinutes(cls.end_time) - timeToMinutes(cls.start_time)
+                          }));
+                        }}
+                      >
+                        {/* Top Resize Handle */}
+                        <div
+                          className="resize-handle w-full h-2 cursor-ns-resize absolute top-0 left-0 bg-black/0 hover:bg-black/10 z-10 transition-colors"
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const startY = e.clientY;
+                            const initialTop = cls.top;
+                            const initialHeight = cls.height;
+
+                            const handlePointerMove = (moveEvt) => {
+                              const deltaY = moveEvt.clientY - startY;
+                              let newTop = initialTop + deltaY;
+
+                              // Snap to 15 mins (0.25 hours = 15px if HOUR_HEIGHT is 60)
+                              const snapGrid = HOUR_HEIGHT / 4;
+                              newTop = Math.round(newTop / snapGrid) * snapGrid;
+
+                              // Bounds checking
+                              if (newTop < 0) newTop = 0; // Don't go above start hour
+                              if (newTop >= initialTop + initialHeight - snapGrid) {
+                                newTop = initialTop + initialHeight - snapGrid; // Minimum 15 min duration
+                              }
+
+                              const heightDiff = initialTop - newTop;
+                              const newHeight = initialHeight + heightDiff;
+
+                              setResizingClass({ id: cls.id, type: 'top', newTop, newHeight });
+                            };
+
+                            const handlePointerUp = async (upEvt) => {
+                              window.removeEventListener('pointermove', handlePointerMove);
+                              window.removeEventListener('pointerup', handlePointerUp);
+
+                              setResizingClass(current => {
+                                if (current && current.id === cls.id) {
+                                  // Save to DB
+                                  const newStartMins = (current.newTop / HOUR_HEIGHT) * 60 + (START_HOUR * 60);
+                                  const newStartTime = formatTimeFromMinutes(newStartMins);
+
+                                  // Optimistic UI
+                                  setScheduleClasses(prev => prev.map(c =>
+                                    c.id === cls.id ? { ...c, start_time: newStartTime } : c
+                                  ));
+
+                                  supabase.from('schedule_classes')
+                                    .update({ start_time: newStartTime })
+                                    .eq('id', cls.id)
+                                    .then(({ error }) => {
+                                      if (error) {
+                                        toast.error('Error al actualizar hora');
+                                        loadData();
+                                      }
+                                    });
+                                }
+                                return null;
+                              });
+                            };
+
+                            window.addEventListener('pointermove', handlePointerMove);
+                            window.addEventListener('pointerup', handlePointerUp);
+                          }}
+                        />
+
+                        <div className="p-2 flex-1 flex flex-col relative pointer-events-none mt-1">
+                          {/* Badge en superior derecho */}
+                          {cls.class_type && (
+                            <div className="absolute top-0 right-1 pointer-events-auto">
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${getClassTypeBadgeColor(cls.class_type)}`}>
+                                {cls.class_type}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className={`font-semibold text-sm leading-tight pr-16 ${isResizing ? 'text-gray-900' : 'text-gray-900'}`}>{cls.subject?.name}</div>
+                          <div className={`text-xs mt-1 font-medium ${isResizing ? 'bg-black/80 text-white px-1 rounded inline-block w-max' : 'text-gray-800'}`}>
+                            {timeDisplay}
+                          </div>
+                          {cls.room && <div className="text-xs text-gray-800">{cls.room}</div>}
+                          {cls.professor && <div className="text-xs text-gray-800">{cls.professor}</div>}
+                        </div>
+
+                        {/* Bottom Resize Handle */}
+                        <div
+                          className="resize-handle w-full h-2 cursor-ns-resize absolute bottom-0 left-0 bg-black/0 hover:bg-black/10 z-10 transition-colors"
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const startY = e.clientY;
+                            const initialHeight = cls.height;
+
+                            const handlePointerMove = (moveEvt) => {
+                              const deltaY = moveEvt.clientY - startY;
+                              let newHeight = initialHeight + deltaY;
+
+                              // Snap to 15 mins
+                              const snapGrid = HOUR_HEIGHT / 4;
+                              newHeight = Math.round(newHeight / snapGrid) * snapGrid;
+
+                              // Bounds checking
+                              if (newHeight < snapGrid) newHeight = snapGrid; // Min 15 mins
+                              const maxBottom = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
+                              if (cls.top + newHeight > maxBottom) {
+                                newHeight = maxBottom - cls.top;
+                              }
+
+                              setResizingClass({ id: cls.id, type: 'bottom', newTop: cls.top, newHeight });
+                            };
+
+                            const handlePointerUp = async (upEvt) => {
+                              window.removeEventListener('pointermove', handlePointerMove);
+                              window.removeEventListener('pointerup', handlePointerUp);
+
+                              setResizingClass(current => {
+                                if (current && current.id === cls.id) {
+                                  // Save to DB
+                                  const newStartMins = (current.newTop / HOUR_HEIGHT) * 60 + (START_HOUR * 60);
+                                  const newEndMins = newStartMins + (current.newHeight / HOUR_HEIGHT) * 60;
+                                  const newEndTime = formatTimeFromMinutes(newEndMins);
+
+                                  // Optimistic UI
+                                  setScheduleClasses(prev => prev.map(c =>
+                                    c.id === cls.id ? { ...c, end_time: newEndTime } : c
+                                  ));
+
+                                  supabase.from('schedule_classes')
+                                    .update({ end_time: newEndTime })
+                                    .eq('id', cls.id)
+                                    .then(({ error }) => {
+                                      if (error) {
+                                        toast.error('Error al actualizar hora');
+                                        loadData();
+                                      }
+                                    });
+                                }
+                                return null;
+                              });
+                            };
+
+                            window.addEventListener('pointermove', handlePointerMove);
+                            window.addEventListener('pointerup', handlePointerUp);
+                          }}
+                        />
+                      </div>
+                    )
+                  })}
 
                   {/* Events */}
                   {dayEvents.map((event, idx) => (
@@ -396,6 +589,9 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
       {/* Modals */}
       {showClassModal && (
         <AddClassModal
+          initialDay={modalInitialData.day}
+          initialStartTime={modalInitialData.startTime}
+          initialEndTime={modalInitialData.endTime}
           onClose={() => setShowClassModal(false)}
           onSuccess={loadData}
         />

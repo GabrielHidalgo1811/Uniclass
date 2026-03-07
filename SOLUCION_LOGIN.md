@@ -16,14 +16,14 @@ He actualizado el código para manejar mejor los errores:
 ## Cómo Usar la Aplicación Correctamente
 
 ### Para REGISTRARTE (primera vez):
-1. Ve a https://academic-dashboard-14.preview.emergentagent.com/auth
+1. Ve a http://localhost:3000/auth
 2. Haz click en "¿No tienes cuenta? Regístrate"
 3. Ingresa tu email y contraseña
 4. Click en "Registrarse"
 5. ✅ Serás redirigido automáticamente al horario
 
 ### Para INICIAR SESIÓN (usuario existente):
-1. Ve a https://academic-dashboard-14.preview.emergentagent.com/auth
+1. Ve a http://localhost:3000/auth
 2. Asegúrate de estar en modo "Iniciar Sesión"
 3. Ingresa el MISMO email y contraseña que usaste al registrarte
 4. Click en "Iniciar Sesión"

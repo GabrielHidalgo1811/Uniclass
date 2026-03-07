@@ -49,7 +49,7 @@ Ver documentación completa en el README principal.
 
 ## 📱 Demo
 
-URL: https://academic-dashboard-14.preview.emergentagent.com
+URL: http://localhost:3000
 
 ## 📝 Licencia
 
