@@ -19,12 +19,13 @@ const TodosView = () => {
     if (user) {
       loadData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      
+
       const { data: subjectsData } = await supabase
         .from('subjects')
         .select('*')
@@ -37,7 +38,7 @@ const TodosView = () => {
         .eq('user_id', user.id)
         .order('is_completed')
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
       setTodos(todosData || []);
     } catch (error) {
@@ -49,7 +50,7 @@ const TodosView = () => {
 
   const addTodo = async () => {
     if (!newTodo.trim()) return;
-    
+
     try {
       const { error } = await supabase
         .from('study_checklists')
@@ -59,7 +60,7 @@ const TodosView = () => {
           topic: newTodo,
           is_completed: false
         }]);
-      
+
       if (error) throw error;
       toast.success('Temario agregado');
       setNewTodo('');
@@ -76,7 +77,7 @@ const TodosView = () => {
         .update({ is_completed: !isCompleted })
         .eq('id', todoId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
       loadData();
     } catch (error) {
@@ -91,7 +92,7 @@ const TodosView = () => {
         .delete()
         .eq('id', todoId)
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
       toast.success('Temario eliminado');
       loadData();
@@ -115,7 +116,7 @@ const TodosView = () => {
     <div className="h-full overflow-auto p-6">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Temarios</h1>
-        
+
         {/* Add new todo */}
         <Card className="mb-6">
           <CardContent className="pt-6">
