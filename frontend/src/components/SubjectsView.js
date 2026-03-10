@@ -74,13 +74,13 @@ const SubjectsView = ({ onSelectSubject }) => {
 
   return (
     <>
-      <div className="h-full overflow-auto p-6 bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
+      <div className="h-full overflow-auto p-4 md:p-6 bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Mis Ramos</h1>
+          <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6 text-gray-900 dark:text-white">Mis Ramos</h1>
 
           {subjects.length === 0 ? (
             <Card className="dark:bg-slate-900/50 dark:border-slate-800">
-              <CardContent className="py-12 text-center text-gray-500 dark:text-gray-400">
+              <CardContent className="py-8 md:py-12 text-center text-sm md:text-base text-gray-500 dark:text-gray-400">
                 No tienes ramos registrados aún.
                 <br />
                 Agrégalos desde la vista de Horario.

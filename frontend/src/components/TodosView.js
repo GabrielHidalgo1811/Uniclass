@@ -113,13 +113,13 @@ const TodosView = () => {
   }
 
   return (
-    <div className="h-full overflow-auto p-6">
+    <div className="h-full overflow-auto p-4 md:p-6">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Temarios</h1>
+        <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Temarios</h1>
 
         {/* Add new todo */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
+        <Card className="mb-4 md:mb-6">
+          <CardContent className="pt-4 md:pt-6">
             <div className="flex space-x-2">
               <Input
                 placeholder="Agregar nuevo tema de estudio..."

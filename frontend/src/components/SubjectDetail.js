@@ -272,20 +272,20 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
 
   return (
     <div className="h-full overflow-auto bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
-      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-6 py-4 flex items-center space-x-4">
-        <Button variant="ghost" size="icon" onClick={onBack} className="dark:text-gray-300 dark:hover:text-white">
+      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-4 md:px-6 py-4 flex items-center gap-2 md:gap-4 flex-wrap">
+        <Button variant="ghost" size="icon" onClick={onBack} className="dark:text-gray-300 dark:hover:text-white flex-shrink-0">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="flex items-center space-x-3">
-          <div className="w-4 h-4 rounded" style={{ backgroundColor: subject.color }}></div>
-          <h1 className="text-2xl font-bold dark:text-white">{subject.name}</h1>
+        <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
+          <div className="w-4 h-4 rounded flex-shrink-0" style={{ backgroundColor: subject.color }}></div>
+          <h1 className="text-xl md:text-2xl font-bold dark:text-white truncate">{subject.name}</h1>
         </div>
-        <div className="ml-auto text-lg font-semibold dark:text-gray-200">
+        <div className="ml-auto text-sm md:text-lg font-semibold dark:text-gray-200">
           Promedio: {calculateWeightedAverage()}
         </div>
       </div>
 
-      <div className="p-6 max-w-4xl mx-auto space-y-4">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
         {grades.map((grade) => {
           const isExpanded = expandedGrades[grade.id];
           const gradeChecklists = checklists[grade.id] || [];
@@ -293,19 +293,19 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
 
           return (
             <Card key={grade.id} className="dark:bg-slate-900 dark:border-slate-800">
-              <CardHeader className="cursor-pointer" onClick={() => toggleGradeExpansion(grade.id)}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    {isExpanded ? <ChevronDown className="h-5 w-5 dark:text-gray-400" /> : <ChevronRight className="h-5 w-5 dark:text-gray-400" />}
-                    <CardTitle className="dark:text-gray-100">{grade.title}</CardTitle>
+              <CardHeader className="cursor-pointer px-4 md:px-6 py-4" onClick={() => toggleGradeExpansion(grade.id)}>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center space-x-2 md:space-x-3">
+                    {isExpanded ? <ChevronDown className="h-4 w-4 md:h-5 md:w-5 dark:text-gray-400" /> : <ChevronRight className="h-4 w-4 md:h-5 md:w-5 dark:text-gray-400" />}
+                    <CardTitle className="dark:text-gray-100 text-base md:text-lg">{grade.title}</CardTitle>
                   </div>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2 md:space-x-4 w-full sm:w-auto justify-end">
                     {grade.exam_date && (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                      <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                         {new Date(grade.exam_date).toLocaleDateString('es-ES')}
                       </span>
                     )}
-                    <span className="text-lg font-bold dark:text-gray-200">
+                    <span className="text-base md:text-lg font-bold dark:text-gray-200">
                       {grade.score > 0 ? `${grade.score} (${grade.weight}%)` : '-'}
                     </span>
                   </div>

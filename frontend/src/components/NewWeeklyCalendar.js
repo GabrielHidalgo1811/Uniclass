@@ -165,33 +165,36 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-950">
       {/* Header */}
-      <div className="border-b dark:border-slate-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, -7))}>
-              <ChevronLeft className="h-5 w-5" />
+      <div className="border-b dark:border-slate-800 px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4 md:flex-wrap lg:flex-nowrap">
+        <div className="flex items-center space-x-2 md:space-x-4 w-full md:w-auto justify-between md:justify-start">
+          <div className="flex items-center space-x-1 md:space-x-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10" onClick={() => setCurrentDate(addDays(currentDate, -7))}>
+              <ChevronLeft className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-lg md:text-xl font-semibold capitalize whitespace-nowrap">
               {format(weekStart, 'MMMM yyyy', { locale: es })}
             </h2>
-            <Button variant="ghost" size="icon" onClick={() => setCurrentDate(addDays(currentDate, 7))}>
-              <ChevronRight className="h-5 w-5" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10" onClick={() => setCurrentDate(addDays(currentDate, 7))}>
+              <ChevronRight className="h-4 w-4 md:h-5 md:w-5" />
             </Button>
           </div>
-          <Button variant="outline" onClick={() => setCurrentDate(new Date())}>
+          <Button variant="outline" size="sm" className="hidden md:flex" onClick={() => setCurrentDate(new Date())}>
+            Hoy
+          </Button>
+          <Button variant="outline" size="sm" className="md:hidden" onClick={() => setCurrentDate(new Date())}>
             Hoy
           </Button>
         </div>
-        <div className="flex space-x-2">
-          <Button onClick={() => {
+        <div className="flex space-x-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+          <Button className="flex-1 md:flex-none text-xs md:text-sm whitespace-nowrap" size="sm" onClick={() => {
             setModalInitialData({ day: '0', startTime: '', endTime: '' });
             setShowClassModal(true);
           }}>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
             Agregar Clase
           </Button>
-          <Button variant="outline" onClick={() => setShowEventModal(true)}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button className="flex-1 md:flex-none text-xs md:text-sm whitespace-nowrap" variant="outline" size="sm" onClick={() => setShowEventModal(true)}>
+            <Plus className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
             Agregar Evento
           </Button>
         </div>
@@ -201,11 +204,11 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
       <div className="flex-1 overflow-auto">
         <div className="flex min-w-max">
           {/* Time column */}
-          <div className="w-16 flex-shrink-0 border-r dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50">
-            <div className="h-16 border-b dark:border-slate-800"></div>
+          <div className="w-12 md:w-16 flex-shrink-0 border-r dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50 sticky left-0 z-10 font-mono">
+            <div className="h-16 border-b dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50"></div>
             {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i).map(hour => (
-              <div key={hour} className="h-[60px] border-b dark:border-slate-800 flex items-start justify-end pr-2 pt-1">
-                <span className="text-xs text-gray-500 dark:text-gray-400">{hour}:00</span>
+              <div key={hour} className="h-[60px] border-b dark:border-slate-800 flex items-start justify-end pr-1 md:pr-2 pt-1 bg-gray-50 dark:bg-slate-900/50">
+                <span className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">{hour}:00</span>
               </div>
             ))}
           </div>
@@ -217,11 +220,11 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
             const dayEvents = getEventsForDay(dayIndex);
 
             return (
-              <div key={dayIndex} className="flex-1 min-w-[140px] border-r dark:border-slate-800 last:border-r-0">
+              <div key={dayIndex} className="flex-1 min-w-[120px] md:min-w-[140px] border-r dark:border-slate-800 last:border-r-0">
                 {/* Day header */}
-                <div className="h-16 border-b dark:border-slate-800 flex flex-col items-center justify-center bg-white dark:bg-slate-950">
-                  <div className="text-xs text-gray-500 dark:text-gray-400 uppercase font-medium">{day.substring(0, 3)}</div>
-                  <div className="text-2xl font-bold mt-1 dark:text-gray-200">{format(dayDate, 'd')}</div>
+                <div className="h-16 border-b dark:border-slate-800 flex flex-col items-center justify-center bg-white dark:bg-slate-950 sticky top-0 z-0">
+                  <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 uppercase font-medium">{day.substring(0, 3)}</div>
+                  <div className="text-xl md:text-2xl font-bold mt-1 dark:text-gray-200">{format(dayDate, 'd')}</div>
                 </div>
 
                 {/* Day content */}
@@ -472,12 +475,12 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                             </div>
                           )}
 
-                          <div className={`font-semibold text-sm leading-tight pr-16 ${isResizing ? 'text-gray-900' : 'text-gray-900'}`}>{cls.subject?.name}</div>
-                          <div className={`text-xs mt-1 font-medium ${isResizing ? 'bg-black/80 text-white px-1 rounded inline-block w-max' : 'text-gray-800'}`}>
+                          <div className={`font-semibold text-xs md:text-sm leading-tight pr-12 md:pr-16 ${isResizing ? 'text-gray-900' : 'text-gray-900'}`}>{cls.subject?.name}</div>
+                          <div className={`text-[10px] md:text-xs mt-0.5 md:mt-1 font-medium ${isResizing ? 'bg-black/80 text-white px-1 rounded inline-block w-max' : 'text-gray-800'}`}>
                             {timeDisplay}
                           </div>
-                          {cls.room && <div className="text-xs text-gray-800">{cls.room}</div>}
-                          {cls.professor && <div className="text-xs text-gray-800">{cls.professor}</div>}
+                          {cls.room && <div className="text-[10px] md:text-xs text-gray-800 line-clamp-1">{cls.room}</div>}
+                          {cls.professor && <div className="text-[10px] md:text-xs text-gray-800 hidden md:block line-clamp-1">{cls.professor}</div>}
                         </div>
 
                         {/* Bottom Resize Handle */}
@@ -573,9 +576,9 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                         }));
                       }}
                     >
-                      <div className="p-2 h-full pointer-events-none">
-                        <div className="font-semibold text-sm text-purple-900">{event.title}</div>
-                        {event.description && <div className="text-xs text-purple-700 mt-1">{event.description}</div>}
+                      <div className="p-1.5 md:p-2 h-full pointer-events-none">
+                        <div className="font-semibold text-[10px] md:text-sm text-purple-900 leading-tight">{event.title}</div>
+                        {event.description && <div className="text-[10px] md:text-xs text-purple-700 mt-0.5 md:mt-1 hidden md:block line-clamp-2">{event.description}</div>}
                       </div>
                     </div>
                   ))}
