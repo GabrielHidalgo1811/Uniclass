@@ -74,7 +74,7 @@ const RemindersSidebar = ({ onClose }) => {
             if (error.code === '42P01') {
                 toast.error('La tabla de recordatorios no existe. Ejecuta el SQL en Supabase.');
             } else {
-                toast.error('Error al agregar el recordatorio');
+                toast.error(`Error al agregar el recordatorio: ${error.message || 'Desconocido'}`);
             }
         } finally {
             setLoading(false);
