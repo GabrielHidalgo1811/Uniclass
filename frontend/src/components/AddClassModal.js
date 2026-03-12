@@ -19,22 +19,21 @@ const DAYS = [
 ];
 
 const COLORS = [
-  '#b4d5c8', '#d4b4e0', '#b4d9e8', '#f0d4b4', '#f0b4c8',
-  '#c8e8d4', '#e8d4b4', '#d4c8e8', '#c8d4e8', '#e8c8d4'
+  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+  '#F7DC6F', '#BB8FCE', '#82E0AA', '#F1948A', '#85C1E9',
+  '#73C6B6', '#F8C471', '#D2B4DE', '#EB984E'
 ];
 
 const CLASS_TYPES = ['Teoría', 'Ayudantía', 'Laboratorio'];
 
-// Auto-assign academic_year_period based on current month (1=Jan-Jun, 2=Jul-Dec)
 const getAcademicPeriodForCreation = () => {
   const month = new Date().getMonth() + 1;
   return month <= 6 ? 1 : 2;
 };
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1–12
-const MINUTES = ['00', '15', '30', '45'];
+const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
 
-// Convert a 12h picker value {hour, minute, ampm} → "HH:MM"
 const to24h = ({ hour, minute, ampm }) => {
   let h = parseInt(hour);
   if (ampm === 'PM' && h !== 12) h += 12;
@@ -48,14 +47,14 @@ const timeTo24hMinutes = (timeStr) => {
   return h * 60 + m;
 };
 
-// Parse "HH:MM" → { hour, minute, ampm } for 12h display
 const parse24hTo12h = (timeStr) => {
   if (!timeStr) return { hour: '8', minute: '00', ampm: 'AM' };
-  const [h24, m] = timeStr.split(':').map(Number);
+  const h24 = parseInt(timeStr.split(':')[0]);
+  const m = timeStr.split(':')[1] || '00';
   let hour = h24 % 12;
   if (hour === 0) hour = 12;
   const ampm = h24 < 12 ? 'AM' : 'PM';
-  return { hour: hour.toString(), minute: m.toString().padStart(2, '0'), ampm };
+  return { hour: hour.toString(), minute: m.padStart(2, '0'), ampm };
 };
 
 const TimePicker = ({ value, onChange, label, id }) => {
@@ -68,11 +67,10 @@ const TimePicker = ({ value, onChange, label, id }) => {
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className="text-xs font-semibold text-gray-500">{label}</Label>
       <div className="flex gap-1 items-center">
-        {/* Hour */}
         <Select value={parsed.hour} onValueChange={(v) => update('hour', v)}>
-          <SelectTrigger className="w-16 px-2">
+          <SelectTrigger className="w-full h-10 px-2 bg-gray-50 dark:bg-gray-800">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -81,10 +79,9 @@ const TimePicker = ({ value, onChange, label, id }) => {
             ))}
           </SelectContent>
         </Select>
-        <span className="text-gray-500 font-bold">:</span>
-        {/* Minute */}
+        <span className="text-gray-400 font-bold">:</span>
         <Select value={parsed.minute} onValueChange={(v) => update('minute', v)}>
-          <SelectTrigger className="w-16 px-2">
+          <SelectTrigger className="w-full h-10 px-2 bg-gray-50 dark:bg-gray-800">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -93,9 +90,8 @@ const TimePicker = ({ value, onChange, label, id }) => {
             ))}
           </SelectContent>
         </Select>
-        {/* AM/PM */}
         <Select value={parsed.ampm} onValueChange={(v) => update('ampm', v)}>
-          <SelectTrigger className="w-20 px-2">
+          <SelectTrigger className="w-full h-10 px-2 bg-gray-50 dark:bg-gray-800">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -108,17 +104,17 @@ const TimePicker = ({ value, onChange, label, id }) => {
   );
 };
 
-const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime = '', initialEndTime = '', initialSemester = 1 }) => {
+const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime = '', initialEndTime = '', initialSemester = 1, editingClass = null }) => {
   const { user } = useAuth();
-  const [name, setName] = useState('');
-  const [color, setColor] = useState(COLORS[0]);
-  const [selectedDay, setSelectedDay] = useState(initialDay);
-  const [startTime, setStartTime] = useState(initialStartTime || '08:00');
-  const [endTime, setEndTime] = useState(initialEndTime || '09:30');
-  const [room, setRoom] = useState('');
-  const [professor, setProfessor] = useState('');
-  const [classType, setClassType] = useState('Teoría');
-  const [semester, setSemester] = useState(initialSemester.toString());
+  const [name, setName] = useState(editingClass?.subject?.name || '');
+  const [color, setColor] = useState(editingClass?.subject?.color || COLORS[0]);
+  const [selectedDay, setSelectedDay] = useState(editingClass ? editingClass.day_of_week.toString() : initialDay);
+  const [startTime, setStartTime] = useState(editingClass ? editingClass.start_time.substring(0, 5) : (initialStartTime || '08:00'));
+  const [endTime, setEndTime] = useState(editingClass ? editingClass.end_time.substring(0, 5) : (initialEndTime || '09:30'));
+  const [room, setRoom] = useState(editingClass?.room || '');
+  const [professor, setProfessor] = useState(editingClass?.professor || '');
+  const [classType, setClassType] = useState(editingClass?.class_type || 'Teoría');
+  const [semester, setSemester] = useState(editingClass?.subject?.semester?.toString() || initialSemester.toString());
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -128,7 +124,6 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
       return;
     }
 
-    // Validate end > start
     if (timeTo24hMinutes(endTime) <= timeTo24hMinutes(startTime)) {
       toast.error('La hora de fin debe ser después de la hora de inicio');
       return;
@@ -136,54 +131,78 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
 
     setLoading(true);
     try {
-      const { data: subjectData, error: subjectError } = await supabase
-        .from('subjects')
-        .insert([{ user_id: user.id, name, color, semester: parseInt(semester), academic_year_period: getAcademicPeriodForCreation() }])
-        .select()
-        .single();
+      if (editingClass) {
+        // Update Subject
+        const { error: subjectError } = await supabase
+          .from('subjects')
+          .update({ name, color, semester: parseInt(semester) })
+          .eq('id', editingClass.subject_id)
+          .eq('user_id', user.id);
 
-      if (subjectError) throw subjectError;
+        if (subjectError) throw subjectError;
 
-      const { error: classError } = await supabase
-        .from('schedule_classes')
-        .insert([{
-          user_id: user.id,
-          subject_id: subjectData.id,
-          day_of_week: parseInt(selectedDay),
-          start_time: startTime + ':00',
-          end_time: endTime + ':00',
-          room: room || null,
-          professor: professor || null,
-          class_type: classType
-        }]);
+        // Update Class
+        const { error: classError } = await supabase
+          .from('schedule_classes')
+          .update({
+            day_of_week: parseInt(selectedDay),
+            start_time: startTime + ':00',
+            end_time: endTime + ':00',
+            room: room || null,
+            professor: professor || null,
+            class_type: classType
+          })
+          .eq('id', editingClass.id)
+          .eq('user_id', user.id);
 
-      if (classError) throw classError;
+        if (classError) throw classError;
+        toast.success('Clase actualizada');
+      } else {
+        // Create new
+        const { data: subjectData, error: subjectError } = await supabase
+          .from('subjects')
+          .insert([{ user_id: user.id, name, color, semester: parseInt(semester), academic_year_period: getAcademicPeriodForCreation() }])
+          .select()
+          .single();
 
-      const grades = [];
-      for (let i = 1; i <= 3; i++) {
-        grades.push({
-          user_id: user.id,
-          subject_id: subjectData.id,
-          title: `Prueba ${i}`,
-          score: 0,
-          weight: 0,
-          exam_number: i,
-          is_visible: true
-        });
+        if (subjectError) throw subjectError;
+
+        const { error: classError } = await supabase
+          .from('schedule_classes')
+          .insert([{
+            user_id: user.id,
+            subject_id: subjectData.id,
+            day_of_week: parseInt(selectedDay),
+            start_time: startTime + ':00',
+            end_time: endTime + ':00',
+            room: room || null,
+            professor: professor || null,
+            class_type: classType
+          }]);
+
+        if (classError) throw classError;
+
+        const grades = [];
+        for (let i = 1; i <= 3; i++) {
+          grades.push({
+            user_id: user.id,
+            subject_id: subjectData.id,
+            title: `Prueba ${i}`,
+            score: 0,
+            weight: 0,
+            exam_number: i,
+            is_visible: true
+          });
+        }
+        await supabase.from('grades').insert(grades);
+        toast.success('Clase agregada exitosamente');
       }
 
-      const { error: gradesError } = await supabase
-        .from('grades')
-        .insert(grades);
-
-      if (gradesError) throw gradesError;
-
-      toast.success('Clase agregada exitosamente');
       onSuccess();
       onClose();
     } catch (error) {
       console.error(error);
-      toast.error(error.message || 'Error al agregar clase');
+      toast.error(error.message || 'Error al guardar');
     } finally {
       setLoading(false);
     }
@@ -191,129 +210,131 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Agregar Clase</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Nombre del Ramo *</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Matemáticas"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Color</Label>
-            <div className="grid grid-cols-5 gap-2">
-              {COLORS.map(c => (
-                <button
-                  key={c}
-                  type="button"
-                  className={`w-10 h-10 rounded-lg border-2 transition-all hover:scale-110 ${color === c ? 'border-gray-800 ring-2 ring-gray-400' : 'border-gray-300'
-                    }`}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setColor(c)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 rounded-2xl border-none shadow-2xl dark:bg-gray-900">
+        <div className="h-2 w-full" style={{ backgroundColor: color }} />
+        <div className="p-6 pt-2">
+          <DialogHeader className="mb-4">
+            <DialogTitle className="text-xl font-bold dark:text-white">
+              {editingClass ? 'Editar Clase' : 'Agregar Clase'}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="day">Día *</Label>
-              <Select value={selectedDay} onValueChange={setSelectedDay}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {DAYS.map(day => (
-                    <SelectItem key={day.value} value={day.value.toString()}>{day.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="name" className="text-xs font-semibold text-gray-500 uppercase">Nombre del Ramo *</Label>
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ej: Matemáticas"
+                className="h-11 bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700 text-base"
+                required
+              />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="semester">Semestre</Label>
-              <Select value={semester} onValueChange={setSemester}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
-                    <SelectItem key={s} value={s.toString()}>Semestre {s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* 12h Time Pickers */}
-          <div className="grid grid-cols-2 gap-4">
-            <TimePicker
-              id="start-time"
-              label="Hora Inicio *"
-              value={startTime}
-              onChange={setStartTime}
-            />
-            <TimePicker
-              id="end-time"
-              label="Hora Fin *"
-              value={endTime}
-              onChange={setEndTime}
-            />
-          </div>
-          {timeTo24hMinutes(endTime) <= timeTo24hMinutes(startTime) && startTime && endTime && (
-            <p className="text-xs text-red-500">⚠ La hora de fin debe ser posterior a la hora de inicio.</p>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="room">Sala</Label>
-            <Input
-              id="room"
-              value={room}
-              onChange={(e) => setRoom(e.target.value)}
-              placeholder="Ej: Sala 301"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="professor">Profesor</Label>
-            <Input
-              id="professor"
-              value={professor}
-              onChange={(e) => setProfessor(e.target.value)}
-              placeholder="Ej: Dr. García"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="class-type">Tipo de Clase</Label>
-            <Select value={classType} onValueChange={setClassType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CLASS_TYPES.map(type => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
+              <Label className="text-xs font-semibold text-gray-500 uppercase">Color del Ramo</Label>
+              <div className="flex flex-wrap gap-2">
+                {COLORS.map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${color === c ? 'border-gray-800 ring-2 ring-gray-400' : 'border-transparent'}`}
+                    style={{ backgroundColor: c }}
+                    onClick={() => setColor(c)}
+                  />
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
+                <div className="relative">
+                  <Input 
+                    type="color" 
+                    value={color} 
+                    onChange={(e) => setColor(e.target.value)}
+                    className="w-8 h-8 p-0 border-none bg-transparent cursor-pointer rounded-full overflow-hidden"
+                  />
+                </div>
+              </div>
+            </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Guardando...' : 'Agregar'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="day" className="text-xs font-semibold text-gray-500 uppercase">Día *</Label>
+                <Select value={selectedDay} onValueChange={setSelectedDay}>
+                  <SelectTrigger className="h-11 bg-gray-50 dark:bg-gray-800 border-gray-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAYS.map(day => (
+                      <SelectItem key={day.value} value={day.value.toString()}>{day.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="semester" className="text-xs font-semibold text-gray-500 uppercase">Semestre</Label>
+                <Select value={semester} onValueChange={setSemester}>
+                  <SelectTrigger className="h-11 bg-gray-50 dark:bg-gray-800 border-gray-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
+                      <SelectItem key={s} value={s.toString()}>Semestre {s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <TimePicker id="start-time" label="HORA INICIO *" value={startTime} onChange={setStartTime} />
+              <TimePicker id="end-time" label="HORA FIN *" value={endTime} onChange={setEndTime} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="room" className="text-xs font-semibold text-gray-500 uppercase">Sala</Label>
+                <Input
+                  id="room"
+                  value={room}
+                  onChange={(e) => setRoom(e.target.value)}
+                  placeholder="Ej: 301"
+                  className="h-11 bg-gray-50 border-gray-200 dark:bg-gray-800"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="class-type" className="text-xs font-semibold text-gray-500 uppercase">Tipo</Label>
+                <Select value={classType} onValueChange={setClassType}>
+                  <SelectTrigger className="h-11 bg-gray-50 dark:bg-gray-800 border-gray-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLASS_TYPES.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="professor" className="text-xs font-semibold text-gray-500 uppercase">Profesor</Label>
+              <Input
+                id="professor"
+                value={professor}
+                onChange={(e) => setProfessor(e.target.value)}
+                placeholder="Nombre del profesor..."
+                className="h-11 bg-gray-50 border-gray-200 dark:bg-gray-800"
+              />
+            </div>
+
+            <DialogFooter className="pt-4 gap-2 sm:gap-0">
+              <Button type="button" variant="ghost" onClick={onClose} className="hover:bg-gray-100 dark:hover:bg-gray-800">
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading} className="px-8 bg-black hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
+                {loading ? 'Guardando...' : (editingClass ? 'Guardar Cambios' : 'Agregar Clase')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

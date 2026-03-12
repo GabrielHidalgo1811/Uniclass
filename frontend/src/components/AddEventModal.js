@@ -21,7 +21,7 @@ const DAYS = [
 ];
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1–12
-const MINUTES = ['00', '15', '30', '45'];
+const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
 
 // Convert a 12h picker value {hour, minute, ampm} → "HH:MM"
 const to24h = ({ hour, minute, ampm }) => {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Plus, ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Undo2, Pencil } from 'lucide-react';
 import { format, addDays, startOfWeek, isBefore } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -52,6 +52,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   const [scheduleClasses, setScheduleClasses] = useState([]);
   const [events, setEvents] = useState([]);
   const [showClassModal, setShowClassModal] = useState(false);
+  const [editingClass, setEditingClass] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalInitialData, setModalInitialData] = useState({ day: '0', startTime: '', endTime: '' });
   const [resizingClass, setResizingClass] = useState(null);
@@ -657,6 +658,18 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                           </div>
                           {cls.room && <div className="text-[10px] md:text-xs text-gray-800 line-clamp-1">{cls.room}</div>}
                           {cls.professor && <div className="text-[10px] md:text-xs text-gray-800 hidden md:block line-clamp-1">{cls.professor}</div>}
+
+                          {/* Botón Editar - solo visible en hover del bloque de clase */}
+                          <button
+                            className="absolute bottom-1 right-1 p-1 rounded-md bg-white/20 hover:bg-white/40 text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingClass(cls);
+                              setShowClassModal(true);
+                            }}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
                         </div>
 
                         {/* Bottom Resize Handle */}
@@ -783,7 +796,11 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
           initialDay={modalInitialData.day}
           initialStartTime={modalInitialData.startTime}
           initialEndTime={modalInitialData.endTime}
-          onClose={() => setShowClassModal(false)}
+          editingClass={editingClass}
+          onClose={() => {
+            setShowClassModal(false);
+            setEditingClass(null);
+          }}
           onSuccess={loadData}
         />
       )}

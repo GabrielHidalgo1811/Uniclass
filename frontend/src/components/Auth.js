@@ -5,12 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { Eye, EyeOff } from 'lucide-react';
 import StudyModeModal from './StudyModeModal';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showStudyModal, setShowStudyModal] = useState(false);
   const [newUserId, setNewUserId] = useState(null);
@@ -91,45 +93,56 @@ const Auth = () => {
         onClose={() => setShowStudyModal(false)}
       />
     )}
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-purple-50 to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900 p-4">
+      <Card className="w-full max-w-[360px] md:max-w-md bg-white border self-center shadow-2xl rounded-2xl overflow-hidden">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <img
-              src={isDarkMode ? '/uniclass-logo-login-white.png' : '/uniclass-logo-login.png'}
+              src="/uniclass-logo-login.png"
               alt="Uniclass"
-              className="h-24 object-contain"
+              className="h-20 md:h-24 object-contain"
             />
           </div>
-          <CardDescription className="text-base">
+          <CardDescription className="text-sm md:text-base text-gray-500 font-medium">
             {isLogin ? 'Inicia sesión en tu cuenta' : 'Crea tu cuenta nueva'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="tu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <Label htmlFor="email" className="text-gray-700 font-semibold">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="bg-gray-50 border-gray-200 focus:bg-white transition-all text-gray-900"
+                  required
+                />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-              <p className="text-xs text-gray-500">Mínimo 6 caracteres</p>
+              <Label htmlFor="password" className="text-gray-700 font-semibold">Contraseña</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10 bg-gray-50 border-gray-200 focus:bg-white transition-all text-gray-900"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[10px] md:text-xs text-gray-500">Mínimo 6 caracteres</p>
             </div>
             <Button
               type="submit"
