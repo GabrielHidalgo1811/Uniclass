@@ -115,7 +115,7 @@ const NewLayout = ({ children, currentView, onNavigate, onSelectExam, showRemind
   const getChecklistsForGrade = (gradeId) => checklists[gradeId] || [];
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden relative">
+    <div className="flex h-screen h-[100dvh] bg-gray-50 dark:bg-gray-900 overflow-hidden relative selection:bg-primary/10">
       {/* Mobile Overlay */}
       {isMobileOpen && (
         <div

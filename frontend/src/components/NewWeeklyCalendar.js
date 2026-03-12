@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
 import { format, addDays, startOfWeek, isBefore } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -14,6 +14,37 @@ const START_HOUR = 8;
 const END_HOUR = 22;
 const HOUR_HEIGHT = 60; // pixels per hour
 
+// ─── Academic Semester Logic ───────────────────────────────────────────────
+// Accept an optional date to check. Defaults to today.
+// Returns 1 (Semester 1: Mar–Jun), 2 (Semester 2: Aug 1–Dec 23), or null (break)
+const getAcademicPeriod = (date = new Date()) => {
+  const month = date.getMonth() + 1; // 1-12
+  const day = date.getDate();
+  if (month === 12 && day >= 24) return null; // summer break
+  if (month === 1 || month === 2) return null;  // summer break (Dec 24 – Feb 28)
+  if (month >= 3 && month <= 6) return 1;        // Semester 1
+  if (month === 7) return null;                  // inter-semester break
+  if (month >= 8) return 2;                      // Semester 2
+  return null;
+};
+
+// Returns which academic period to assign a NEW class created today
+const getAcademicPeriodForCreation = () => {
+  const month = new Date().getMonth() + 1;
+  return month <= 6 ? 1 : 2;
+};
+
+const BREAK_INFO = {
+  7: { emoji: '📚', title: 'Receso entre semestres', subtitle: 'El Semestre 2 comienza el 1 de agosto.' },
+  summer: { emoji: '☀️', title: 'Vacaciones de verano', subtitle: 'El Semestre 1 comienza el 1 de marzo.' },
+};
+
+const getBreakInfo = (date = new Date()) => {
+  const month = date.getMonth() + 1;
+  if (month === 7) return BREAK_INFO[7];
+  return BREAK_INFO.summer;
+};
+
 const NewWeeklyCalendar = ({ onSubjectClick }) => {
   const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -24,46 +55,123 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   const [showEventModal, setShowEventModal] = useState(false);
   const [modalInitialData, setModalInitialData] = useState({ day: '0', startTime: '', endTime: '' });
   const [resizingClass, setResizingClass] = useState(null);
+  const [hoveredCell, setHoveredCell] = useState(null); // { dayIndex, hourIndex }
+  const [history, setHistory] = useState([]); // undo history stack
+  const [dragPreview, setDragPreview] = useState(null); // { dayIndex, top, height, label }
 
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekStart = React.useMemo(() => startOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]);
+
+  // Ctrl+Z undo handler
+  const handleUndo = useCallback(async (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      e.preventDefault();
+      if (history.length === 0) {
+        toast('No hay cambios para deshacer');
+        return;
+      }
+      const prev = history[history.length - 1];
+      setHistory(h => h.slice(0, -1));
+
+      // Revert each changed class in DB
+      for (const cls of prev) {
+        await supabase.from('schedule_classes')
+          .update({
+            day_of_week: cls.day_of_week,
+            start_time: cls.start_time,
+            end_time: cls.end_time
+          })
+          .eq('id', cls.id);
+      }
+      setScheduleClasses(prev);
+      toast.success('Cambio deshecho (Ctrl+Z)');
+    }
+  }, [history]);
 
   useEffect(() => {
-    if (user) {
-      loadData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    window.addEventListener('keydown', handleUndo);
+    return () => window.removeEventListener('keydown', handleUndo);
+  }, [handleUndo]);
 
-  const loadData = async () => {
+  const pushHistory = () => {
+    setHistory(h => [...h.slice(-19), [...scheduleClasses]]); // keep last 20 states
+  };
+
+  const dataFetchId = React.useRef(0);
+
+  const loadData = useCallback(async () => {
+    if (!user) return;
+    const currentFetchId = ++dataFetchId.current;
+    
     try {
-      const { data: subjectsData } = await supabase
-        .from('subjects')
-        .select('*')
-        .eq('user_id', user.id);
-      setSubjects(subjectsData || []);
+      const activeperiod = getAcademicPeriod(weekStart);
 
-      const { data: classesData } = await supabase
-        .from('schedule_classes')
-        .select('*')
-        .eq('user_id', user.id);
-      setScheduleClasses(classesData || []);
+      // Instant UI reset for classes (the main source of flickering)
+      if (activeperiod === null) {
+        setScheduleClasses([]);
+      }
 
-      const { data: eventsData } = await supabase
-        .from('events')
-        .select('*')
-        .eq('user_id', user.id);
+      // Start fetching subjects and events in parallel
+      const [subjectsRes, eventsRes] = await Promise.all([
+        supabase.from('subjects').select('*').eq('user_id', user.id),
+        supabase.from('events').select('*').eq('user_id', user.id)
+      ]);
 
+      if (currentFetchId !== dataFetchId.current) return;
+
+      const subjectsData = subjectsRes.data || [];
+      const eventsData = eventsRes.data || [];
+      setSubjects(subjectsData);
+
+      // Handle classes filtering locally based on the fetched subjects
+      if (activeperiod !== null && subjectsData.length > 0) {
+        const subjectsInPeriod = subjectsData
+          .filter(s => (s.academic_year_period ?? 1) === activeperiod)
+          .map(s => s.id);
+
+        if (subjectsInPeriod.length > 0) {
+          const { data: classesData, error: classesError } = await supabase
+            .from('schedule_classes')
+            .select('*')
+            .eq('user_id', user.id)
+            .in('subject_id', subjectsInPeriod);
+
+          if (currentFetchId !== dataFetchId.current) return;
+
+          if (!classesError) {
+            setScheduleClasses(classesData || []);
+          }
+        } else {
+          setScheduleClasses([]);
+        }
+      } else {
+        setScheduleClasses([]);
+      }
+
+      // Filter and set events
       const now = new Date();
-      const filteredEvents = (eventsData || []).filter(event => {
+      const filteredEvents = eventsData.filter(event => {
         if (event.is_fixed) return true;
         const eventDate = new Date(event.start_timestamp);
         return !isBefore(eventDate, now);
       });
       setEvents(filteredEvents);
+
     } catch (error) {
-      toast.error('Error al cargar datos');
+      console.error('Error loading data:', error);
+      if (currentFetchId === dataFetchId.current) {
+        toast.error('Error al cargar datos');
+      }
     }
-  };
+  }, [user, weekStart]);
+
+  useEffect(() => {
+    if (user) {
+      // Clear current classes to show feedback immediately (or avoid stale data)
+      setScheduleClasses([]);
+      loadData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, weekStart.getTime()]);
 
   const timeToMinutes = (timeStr) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -78,7 +186,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
 
   const getClassesForDay = (dayIndex) => {
     return scheduleClasses
-      .filter(cls => cls.day_of_week === dayIndex)
+      .filter(cls => cls.day_of_week === dayIndex + 1) // DB stores 1-7 (Mon=1)
       .map(cls => {
         const subject = subjects.find(s => s.id === cls.subject_id);
         const startMinutes = timeToMinutes(cls.start_time);
@@ -162,6 +270,11 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
     }
   };
 
+  const currentPeriod = getAcademicPeriod(weekStart); // check the DISPLAYED week
+  const isBreakPeriod = currentPeriod === null;
+  const breakInfo = isBreakPeriod ? getBreakInfo(weekStart) : null;
+
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-950">
       {/* Header */}
@@ -187,7 +300,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
         </div>
         <div className="flex space-x-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
           <Button className="flex-1 md:flex-none text-xs md:text-sm whitespace-nowrap" size="sm" onClick={() => {
-            setModalInitialData({ day: '0', startTime: '', endTime: '' });
+            setModalInitialData({ day: '1', startTime: '', endTime: '' });
             setShowClassModal(true);
           }}>
             <Plus className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
@@ -197,8 +310,27 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
             <Plus className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
             Agregar Evento
           </Button>
+          {history.length > 0 && (
+            <Button
+              className="flex-none text-xs md:text-sm whitespace-nowrap"
+              variant="ghost"
+              size="sm"
+              title="Deshacer (Ctrl+Z)"
+              onClick={() => handleUndo({ ctrlKey: true, key: 'z', preventDefault: () => {} })}
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
+
+      {isBreakPeriod && breakInfo && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 px-4 py-2 flex items-center justify-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+          <span className="text-lg">{breakInfo.emoji}</span>
+          <span className="font-medium">{breakInfo.title}:</span>
+          <span className="opacity-90">{breakInfo.subtitle}</span>
+        </div>
+      )}
 
       {/* Calendar */}
       <div className="flex-1 overflow-auto">
@@ -234,10 +366,32 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
+                    // Compute ghost position for visual preview
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const dropY = e.clientY - rect.top;
+                    let startMins = Math.round(((dropY / HOUR_HEIGHT) * 60 + START_HOUR * 60) / 15) * 15;
+                    const durationStr = e.dataTransfer.types.includes('application/duration')
+                      ? Number(e.dataTransfer.getData('application/duration'))
+                      : 90;
+                    const ghostTop = ((startMins - START_HOUR * 60) / 60) * HOUR_HEIGHT;
+                    const ghostHeight = (durationStr / 60) * HOUR_HEIGHT;
+                    const fmt = (m) => {
+                      const h = Math.floor(m / 60); const mn = m % 60;
+                      const ampm = h < 12 ? 'AM' : 'PM';
+                      const h12 = h % 12 === 0 ? 12 : h % 12;
+                      return `${h12}:${mn.toString().padStart(2, '0')} ${ampm}`;
+                    };
+                    setDragPreview({ dayIndex, top: ghostTop, height: ghostHeight, label: `${fmt(startMins)} – ${fmt(startMins + durationStr)}` });
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                      setDragPreview(null);
+                    }
                   }}
                   onClick={(e) => {
                     // Solo activar si se hace clic en el fondo, no en una clase/evento
-                    if (e.target !== e.currentTarget) return;
+                    // Allow clicks from hour-cell children by checking closest
+                    if (e.target.closest('[data-class-block]') || e.target.closest('[data-event-block]')) return;
 
                     const rect = e.currentTarget.getBoundingClientRect();
                     const clickY = e.clientY - rect.top;
@@ -255,7 +409,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                     const endTime = formatTime(clickedMinutes + 90); // Default 1.5h duration
 
                     setModalInitialData({
-                      day: dayIndex.toString(),
+                      day: (dayIndex + 1).toString(), // 1-7 (Mon=1)
                       startTime,
                       endTime
                     });
@@ -267,6 +421,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                       const dataInfo = e.dataTransfer.getData('text/plain');
                       if (!dataInfo) return;
                       const { type, id, durationMinutes } = JSON.parse(dataInfo);
+                      pushHistory(); // save state before drag-drop change
 
                       // Calculate new time based on drop position
                       const rect = e.currentTarget.getBoundingClientRect();
@@ -290,15 +445,17 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                       const newEndTime = formatTime(newEndMinutes);
 
                       if (type === 'class') {
+                        const newDayOfWeek = dayIndex + 1; // DB stores 1-7
                         // Optimistic UI update
                         setScheduleClasses(prev => prev.map(c =>
-                          c.id === id ? { ...c, day_of_week: dayIndex, start_time: newStartTime, end_time: newEndTime } : c
+                          c.id === id ? { ...c, day_of_week: newDayOfWeek, start_time: newStartTime, end_time: newEndTime } : c
                         ));
+                        setDragPreview(null);
 
                         const { error } = await supabase
                           .from('schedule_classes')
                           .update({
-                            day_of_week: dayIndex,
+                            day_of_week: newDayOfWeek,
                             start_time: newStartTime,
                             end_time: newEndTime
                           })
@@ -317,7 +474,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                         setEvents(prev => prev.map(e =>
                           e.id === id ? {
                             ...e,
-                            day_of_week: dayIndex,
+                            day_of_week: dayIndex + 1, // events keep 1-7 too
                             start_time: newStartTime,
                             end_time: newEndTime,
                             start_timestamp: startTimestamp,
@@ -346,15 +503,31 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                     }
                   }}
                 >
-                  {/* Hour lines */}
-                  {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => (
-                    <div key={i} className="absolute w-full border-b border-gray-100 dark:border-slate-800/60 pointer-events-none" style={{ top: `${i * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}>
-                      {/* Hover indicator for adding new class */}
-                      <div className="hidden group-hover:flex w-full h-full items-center justify-center bg-gray-50/50 dark:bg-slate-800/30 opacity-0 hover:opacity-100 transition-opacity">
-                        <Plus className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                  {/* Hour cells — interactive hover glow */}
+                  {Array.from({ length: END_HOUR - START_HOUR }, (_, i) => {
+                    const isHovered = hoveredCell?.dayIndex === dayIndex && hoveredCell?.hourIndex === i;
+                    return (
+                      <div
+                        key={i}
+                        className={`absolute w-full border-b border-gray-100 dark:border-slate-800/60 transition-all duration-100 ${
+                          isHovered
+                            ? 'ring-2 ring-inset ring-blue-400 dark:ring-blue-500 shadow-[inset_0_0_10px_rgba(96,165,250,0.25)] bg-blue-50/60 dark:bg-blue-950/30 z-10'
+                            : ''
+                        }`}
+                        style={{ top: `${i * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
+                        onMouseEnter={() => setHoveredCell({ dayIndex, hourIndex: i })}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        {isHovered && (
+                          <div className="flex w-full h-full items-center justify-center pointer-events-none">
+                            <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400">
+                              <Plus className="h-5 w-5 drop-shadow-[0_0_6px_rgba(96,165,250,0.8)]" />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Classes */}
                   {dayClasses.map((cls, idx) => {
@@ -387,6 +560,7 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                           if (onSubjectClick) onSubjectClick(cls.subject_id);
                         }}
                         data-testid="calendar-class-item"
+                        data-class-block="true"
                         draggable={!isResizing}
                         onDragStart={(e) => {
                           if (isResizing) {
@@ -410,6 +584,8 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                             const startY = e.clientY;
                             const initialTop = cls.top;
                             const initialHeight = cls.height;
+
+                            pushHistory(); // save before resize
 
                             const handlePointerMove = (moveEvt) => {
                               const deltaY = moveEvt.clientY - startY;
@@ -492,6 +668,8 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                             const startY = e.clientY;
                             const initialHeight = cls.height;
 
+                            pushHistory(); // save before resize
+
                             const handlePointerMove = (moveEvt) => {
                               const deltaY = moveEvt.clientY - startY;
                               let newHeight = initialHeight + deltaY;
@@ -547,6 +725,16 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                       </div>
                     )
                   })}
+
+                  {/* Drag preview ghost */}
+                  {dragPreview && dragPreview.dayIndex === dayIndex && (
+                    <div
+                      className="absolute left-1 right-1 rounded-lg border-2 border-dashed border-blue-400 bg-blue-200/40 dark:bg-blue-700/25 z-30 flex flex-col items-center justify-center pointer-events-none"
+                      style={{ top: `${dragPreview.top}px`, height: `${Math.max(dragPreview.height, 30)}px` }}
+                    >
+                      <span className="text-[11px] font-bold text-blue-700 dark:text-blue-300 select-none">{dragPreview.label}</span>
+                    </div>
+                  )}
 
                   {/* Events */}
                   {dayEvents.map((event, idx) => (

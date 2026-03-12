@@ -11,22 +11,99 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 
 const DAYS = [
-  { label: 'Lunes', value: 0 },
-  { label: 'Martes', value: 1 },
-  { label: 'Miércoles', value: 2 },
-  { label: 'Jueves', value: 3 },
-  { label: 'Viernes', value: 4 },
-  { label: 'Sábado', value: 5 },
-  { label: 'Domingo', value: 6 }
+  { label: 'Lunes', value: 1 },
+  { label: 'Martes', value: 2 },
+  { label: 'Miércoles', value: 3 },
+  { label: 'Jueves', value: 4 },
+  { label: 'Viernes', value: 5 },
+  { label: 'Sábado', value: 6 },
+  { label: 'Domingo', value: 7 }
 ];
+
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1–12
+const MINUTES = ['00', '15', '30', '45'];
+
+// Convert a 12h picker value {hour, minute, ampm} → "HH:MM"
+const to24h = ({ hour, minute, ampm }) => {
+  let h = parseInt(hour);
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return `${h.toString().padStart(2, '0')}:${minute}`;
+};
+
+const timeTo24hMinutes = (timeStr) => {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// Parse "HH:MM" → { hour, minute, ampm } for 12h display
+const parse24hTo12h = (timeStr) => {
+  if (!timeStr) return { hour: '8', minute: '00', ampm: 'AM' };
+  const [h24, m] = timeStr.split(':').map(Number);
+  let hour = h24 % 12;
+  if (hour === 0) hour = 12;
+  const ampm = h24 < 12 ? 'AM' : 'PM';
+  return { hour: hour.toString(), minute: m.toString().padStart(2, '0'), ampm };
+};
+
+const TimePicker = ({ value, onChange, label, id }) => {
+  const parsed = parse24hTo12h(value);
+
+  const update = (field, val) => {
+    const next = { ...parsed, [field]: val };
+    onChange(to24h(next));
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex gap-1 items-center">
+        {/* Hour */}
+        <Select value={parsed.hour} onValueChange={(v) => update('hour', v)}>
+          <SelectTrigger className="w-16 px-2">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {HOURS.map(h => (
+              <SelectItem key={h} value={h.toString()}>{h}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-gray-500 font-bold">:</span>
+        {/* Minute */}
+        <Select value={parsed.minute} onValueChange={(v) => update('minute', v)}>
+          <SelectTrigger className="w-16 px-2">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MINUTES.map(m => (
+              <SelectItem key={m} value={m}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* AM/PM */}
+        <Select value={parsed.ampm} onValueChange={(v) => update('ampm', v)}>
+          <SelectTrigger className="w-20 px-2">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AM">AM</SelectItem>
+            <SelectItem value="PM">PM</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+};
 
 const AddEventModal = ({ onClose, onSuccess }) => {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [dayOfWeek, setDayOfWeek] = useState('0');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
+  const [dayOfWeek, setDayOfWeek] = useState('1');
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('09:00');
   const [isFixed, setIsFixed] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -37,19 +114,23 @@ const AddEventModal = ({ onClose, onSuccess }) => {
       return;
     }
 
+    // End time validation
+    if (endTime && timeTo24hMinutes(endTime) <= timeTo24hMinutes(startTime)) {
+      toast.error('La hora de fin debe ser posterior a la de inicio');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Crear fecha de referencia para timestamp (opcional, para compatibilidad)
       const today = new Date();
       const startTimestamp = new Date(today);
       const [startHour, startMinute] = startTime.split(':');
       startTimestamp.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
 
-      const endTimestamp = endTime ? new Date(today) : startTimestamp;
-      if (endTime) {
-        const [endHour, endMinute] = endTime.split(':');
-        endTimestamp.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
-      }
+      const actualEndTime = endTime || startTime;
+      const endTimestamp = new Date(today);
+      const [endHour, endMinute] = actualEndTime.split(':');
+      endTimestamp.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
 
       const { error } = await supabase
         .from('events')
@@ -59,16 +140,15 @@ const AddEventModal = ({ onClose, onSuccess }) => {
           description: description || null,
           day_of_week: parseInt(dayOfWeek),
           start_time: startTime,
-          end_time: endTime || startTime,
+          end_time: actualEndTime,
           is_fixed: isFixed,
-          // Mantener timestamps para compatibilidad
           start_timestamp: startTimestamp.toISOString(),
           end_timestamp: endTimestamp.toISOString()
         }]);
 
       if (error) throw error;
 
-      toast.success(isFixed ? 'Evento anclado creado (se repetirá cada semana)' : 'Evento creado exitosamente');
+      toast.success(isFixed ? 'Evento anclado creado' : 'Evento creado exitosamente');
       onSuccess();
       onClose();
     } catch (error) {
@@ -125,25 +205,18 @@ const AddEventModal = ({ onClose, onSuccess }) => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start-time">Hora Inicio *</Label>
-              <Input
-                id="start-time"
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="end-time">Hora Fin</Label>
-              <Input
-                id="end-time"
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-              />
-            </div>
+            <TimePicker
+              id="start-time"
+              label="Hora Inicio *"
+              value={startTime}
+              onChange={setStartTime}
+            />
+            <TimePicker
+              id="end-time"
+              label="Hora Fin"
+              value={endTime}
+              onChange={setEndTime}
+            />
           </div>
 
           <div className="flex items-center space-x-2 p-3 bg-blue-50 rounded-lg border border-blue-200">

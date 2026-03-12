@@ -3,15 +3,30 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { toast } from 'sonner';
+import StudyModeModal from './StudyModeModal';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showStudyModal, setShowStudyModal] = useState(false);
+  const [newUserId, setNewUserId] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(
+    () => document.documentElement.classList.contains('dark')
+  );
   const { signIn, signUp } = useAuth();
+
+  // Keep dark mode state in sync when it changes externally
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -54,7 +69,10 @@ const Auth = () => {
           return;
         }
         if (data?.user) {
-          toast.success('Cuenta creada exitosamente');
+          toast.success('¡Cuenta creada! Cuéntanos cómo estudias.');
+          setNewUserId(data.user.id);
+          setShowStudyModal(true);
+          return; // Don't redirect until modal is closed
         }
       }
     } catch (error) {
@@ -66,11 +84,22 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #e8f4f1 0%, #e4e0f1 100%)' }}>
+    <>
+    {showStudyModal && (
+      <StudyModeModal
+        userId={newUserId}
+        onClose={() => setShowStudyModal(false)}
+      />
+    )}
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-purple-50 to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src="/uniclass-logo-login.png" alt="Uniclass" className="h-24 object-contain" />
+            <img
+              src={isDarkMode ? '/uniclass-logo-login-white.png' : '/uniclass-logo-login.png'}
+              alt="Uniclass"
+              className="h-24 object-contain"
+            />
           </div>
           <CardDescription className="text-base">
             {isLogin ? 'Inicia sesión en tu cuenta' : 'Crea tu cuenta nueva'}
@@ -124,6 +153,7 @@ const Auth = () => {
         </CardContent>
       </Card>
     </div>
+    </>
   );
 };
 
