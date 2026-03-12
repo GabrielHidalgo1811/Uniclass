@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 const DAYS = [
   { label: 'Lunes', value: 1 },
@@ -116,6 +117,7 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
   const [classType, setClassType] = useState(editingClass?.class_type || 'Teoría');
   const [semester, setSemester] = useState(editingClass?.subject?.semester?.toString() || initialSemester.toString());
   const [loading, setLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -158,20 +160,58 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
         if (classError) throw classError;
         toast.success('Clase actualizada');
       } else {
-        // Create new
-        const { data: subjectData, error: subjectError } = await supabase
+        // Create new or Reuse existing subject
+        // Robust search: Fetch all and match locally to handle subtle differences
+        const { data: allSubjects, error: searchError } = await supabase
           .from('subjects')
-          .insert([{ user_id: user.id, name, color, semester: parseInt(semester), academic_year_period: getAcademicPeriodForCreation() }])
-          .select()
-          .single();
+          .select('id, name')
+          .eq('user_id', user.id);
 
-        if (subjectError) throw subjectError;
+        if (searchError) throw searchError;
+
+        const normalizedInput = name.trim().toLowerCase();
+        const existingSubject = allSubjects?.find(s => 
+          s.name.trim().toLowerCase() === normalizedInput
+        );
+
+        let subjectId;
+        if (existingSubject) {
+          subjectId = existingSubject.id;
+        } else {
+          const { data: subjectData, error: subjectError } = await supabase
+            .from('subjects')
+            .insert([{ 
+              user_id: user.id, 
+              name: name.trim(), 
+              color, 
+              semester: parseInt(semester), 
+              academic_year_period: getAcademicPeriodForCreation() 
+            }])
+            .select()
+            .single();
+
+          if (subjectError) throw subjectError;
+          subjectId = subjectData.id;
+
+          // Create default grades for NEW subjects
+          const grades = Array.from({ length: 3 }, (_, i) => ({
+            user_id: user.id,
+            subject_id: subjectId,
+            title: `Prueba ${i + 1}`,
+            score: 0,
+            weight: 0,
+            exam_number: i + 1,
+            is_visible: true
+          }));
+          
+          await supabase.from('grades').insert(grades);
+        }
 
         const { error: classError } = await supabase
           .from('schedule_classes')
           .insert([{
             user_id: user.id,
-            subject_id: subjectData.id,
+            subject_id: subjectId,
             day_of_week: parseInt(selectedDay),
             start_time: startTime + ':00',
             end_time: endTime + ':00',
@@ -181,20 +221,6 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
           }]);
 
         if (classError) throw classError;
-
-        const grades = [];
-        for (let i = 1; i <= 3; i++) {
-          grades.push({
-            user_id: user.id,
-            subject_id: subjectData.id,
-            title: `Prueba ${i}`,
-            score: 0,
-            weight: 0,
-            exam_number: i,
-            is_visible: true
-          });
-        }
-        await supabase.from('grades').insert(grades);
         toast.success('Clase agregada exitosamente');
       }
 
@@ -208,8 +234,33 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
     }
   };
 
+  const handleDelete = async () => {
+    if (!editingClass || !user) return;
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('schedule_classes')
+        .delete()
+        .eq('id', editingClass.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      toast.success('Clase eliminada');
+      onSuccess();
+      onClose();
+    } catch (error) {
+      console.error(error);
+      toast.error(error.message || 'Error al eliminar');
+    } finally {
+      setLoading(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   return (
-    <Dialog open={true} onOpenChange={onClose}>
+    <>
+      <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-0 rounded-2xl border-none shadow-2xl dark:bg-gray-900">
         <div className="h-2 w-full" style={{ backgroundColor: color }} />
         <div className="p-6 pt-2">
@@ -325,18 +376,41 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
               />
             </div>
 
-            <DialogFooter className="pt-4 gap-2 sm:gap-0">
-              <Button type="button" variant="ghost" onClick={onClose} className="hover:bg-gray-100 dark:hover:bg-gray-800">
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={loading} className="px-8 bg-black hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200">
-                {loading ? 'Guardando...' : (editingClass ? 'Guardar Cambios' : 'Agregar Clase')}
-              </Button>
+            <DialogFooter className="pt-4 flex flex-col sm:flex-row gap-2">
+              {editingClass && (
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  onClick={() => setShowDeleteConfirm(true)} 
+                  disabled={loading}
+                  className="sm:mr-auto"
+                >
+                  Eliminar
+                </Button>
+              )}
+              <div className="flex gap-2 sm:ml-auto">
+                <Button type="button" variant="ghost" onClick={onClose} className="hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8 bg-black hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-all active:scale-95">
+                  {loading ? 'Guardando...' : (editingClass ? 'Guardar Cambios' : 'Agregar Clase')}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </div>
       </DialogContent>
     </Dialog>
+
+    <DeleteConfirmationModal
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      onConfirm={handleDelete}
+      loading={loading}
+      title="¿Eliminar esta clase?"
+      description={`Se eliminará esta sesión de ${name || 'este ramo'} del horario. Otros bloques de este ramo no se verán afectados.`}
+    />
+    </>
   );
 };
 

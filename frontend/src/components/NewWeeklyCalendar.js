@@ -8,6 +8,7 @@ import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
 import AddClassModal from './AddClassModal';
 import AddEventModal from './AddEventModal';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const START_HOUR = 8;
@@ -54,47 +55,28 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
   const [showClassModal, setShowClassModal] = useState(false);
   const [editingClass, setEditingClass] = useState(null);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
   const [modalInitialData, setModalInitialData] = useState({ day: '0', startTime: '', endTime: '' });
   const [resizingClass, setResizingClass] = useState(null);
   const [hoveredCell, setHoveredCell] = useState(null); // { dayIndex, hourIndex }
   const [history, setHistory] = useState([]); // undo history stack
   const [dragPreview, setDragPreview] = useState(null); // { dayIndex, top, height, label }
+  const [clipboard, setClipboard] = useState(null); // { type: 'class'|'event', data: {...} }
+  const [hoveredItem, setHoveredItem] = useState(null); // { type: 'class'|'event', data: {...} }
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingItem, setDeletingItem] = useState(null);
 
   const weekStart = React.useMemo(() => startOfWeek(currentDate, { weekStartsOn: 1 }), [currentDate]);
 
-  // Ctrl+Z undo handler
-  const handleUndo = useCallback(async (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault();
-      if (history.length === 0) {
-        toast('No hay cambios para deshacer');
-        return;
-      }
-      const prev = history[history.length - 1];
-      setHistory(h => h.slice(0, -1));
+  const timeToMinutes = (timeStr) => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
 
-      // Revert each changed class in DB
-      for (const cls of prev) {
-        await supabase.from('schedule_classes')
-          .update({
-            day_of_week: cls.day_of_week,
-            start_time: cls.start_time,
-            end_time: cls.end_time
-          })
-          .eq('id', cls.id);
-      }
-      setScheduleClasses(prev);
-      toast.success('Cambio deshecho (Ctrl+Z)');
-    }
-  }, [history]);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleUndo);
-    return () => window.removeEventListener('keydown', handleUndo);
-  }, [handleUndo]);
-
-  const pushHistory = () => {
-    setHistory(h => [...h.slice(-19), [...scheduleClasses]]); // keep last 20 states
+  const formatTimeFromMinutes = (mins) => {
+    const h = Math.floor(mins / 60);
+    const m = Math.floor(mins % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`;
   };
 
   const dataFetchId = React.useRef(0);
@@ -165,6 +147,175 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
     }
   }, [user, weekStart]);
 
+  // Ctrl+Z undo handler
+  const handleUndo = useCallback(async (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      e.preventDefault();
+      if (history.length === 0) {
+        toast('No hay cambios para deshacer');
+        return;
+      }
+      const prev = history[history.length - 1];
+      setHistory(h => h.slice(0, -1));
+
+      // Revert each changed class in DB
+      for (const cls of prev) {
+        await supabase.from('schedule_classes')
+          .update({
+            day_of_week: cls.day_of_week,
+            start_time: cls.start_time,
+            end_time: cls.end_time
+          })
+          .eq('id', cls.id);
+      }
+      setScheduleClasses(prev);
+      toast.success('Cambio deshecho (Ctrl+Z)');
+    }
+  }, [history]);
+
+  // Ctrl+C and Ctrl+V handlers
+  const handleCopyPaste = useCallback(async (e) => {
+    // Copy: Ctrl+C
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      if (hoveredItem) {
+        setClipboard(hoveredItem);
+        toast.success(`Copiado: ${hoveredItem.type === 'class' ? (hoveredItem.data.subject?.name || 'Clase') : (hoveredItem.data.title || 'Evento')}`);
+      }
+    }
+
+    // Paste: Ctrl+V
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+      if (!clipboard || !hoveredCell) return;
+      e.preventDefault();
+
+      const { dayIndex, hourIndex } = hoveredCell;
+      const startMins = hourIndex * 60 + START_HOUR * 60;
+      const formatTime = (mins) => {
+        const h = Math.floor(mins / 60);
+        const m = Math.floor(mins % 60);
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`;
+      };
+
+      if (clipboard.type === 'class') {
+        const duration = timeToMinutes(clipboard.data.end_time) - timeToMinutes(clipboard.data.start_time);
+        const newStartTime = formatTime(startMins);
+        const newEndTime = formatTime(startMins + duration);
+
+        const { data, error } = await supabase
+          .from('schedule_classes')
+          .insert([{
+            user_id: user.id,
+            subject_id: clipboard.data.subject_id,
+            day_of_week: dayIndex + 1,
+            start_time: newStartTime,
+            end_time: newEndTime,
+            room: clipboard.data.room,
+            professor: clipboard.data.professor,
+            class_type: clipboard.data.class_type
+          }])
+          .select()
+          .single();
+
+        if (error) {
+          toast.error('Error al pegar clase');
+        } else {
+          toast.success('Clase pegada');
+          loadData();
+        }
+      } else if (clipboard.type === 'event') {
+        const duration = (clipboard.data.end_time && clipboard.data.start_time) 
+          ? (timeToMinutes(clipboard.data.end_time) - timeToMinutes(clipboard.data.start_time))
+          : 60;
+
+        const newStartTime = formatTime(startMins);
+        const newEndTime = formatTime(startMins + duration);
+        
+        // Prepare timestamps if needed
+        const today = new Date();
+        const targetDate = addDays(startOfWeek(today, { weekStartsOn: 1 }), dayIndex);
+        const targetDateStr = format(targetDate, 'yyyy-MM-dd');
+
+        const { error } = await supabase
+          .from('events')
+          .insert([{
+            user_id: user.id,
+            title: clipboard.data.title,
+            description: clipboard.data.description,
+            color: clipboard.data.color,
+            day_of_week: dayIndex,
+            start_time: newStartTime,
+            end_time: newEndTime,
+            start_timestamp: `${targetDateStr}T${newStartTime}`,
+            end_timestamp: `${targetDateStr}T${newEndTime}`,
+            is_fixed: clipboard.data.is_fixed
+          }]);
+
+        if (error) {
+          toast.error('Error al pegar evento');
+        } else {
+          toast.success('Evento pegado');
+          loadData();
+        }
+      }
+    }
+  }, [clipboard, hoveredItem, hoveredCell, user, loadData]);
+
+  const handleDelete = useCallback(async () => {
+    const item = deletingItem || hoveredItem;
+    if (!item || !user) return;
+
+    const { type, data } = item;
+    const table = type === 'class' ? 'schedule_classes' : 'events';
+    
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq('id', data.id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast.error(`Error al eliminar ${type === 'class' ? 'clase' : 'evento'}`);
+    } else {
+      toast.success(`${type === 'class' ? 'Clase' : 'Evento'} eliminada`);
+      setHoveredItem(null);
+      setDeletingItem(null);
+      setShowDeleteConfirm(false);
+      loadData();
+    }
+  }, [deletingItem, hoveredItem, user, loadData]);
+
+  useEffect(() => {
+    const handleKeyboardShortcuts = (e) => {
+      // Undo: Ctrl+Z
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        handleUndo(e);
+      }
+      // Copy: Ctrl+C
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        handleCopyPaste(e);
+      }
+      // Paste: Ctrl+V
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        handleCopyPaste(e);
+      }
+      // Delete: Delete key
+      else if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Only trigger if not typing in an input
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+          if (hoveredItem) {
+            setDeletingItem(hoveredItem);
+            setShowDeleteConfirm(true);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyboardShortcuts);
+    return () => {
+      window.removeEventListener('keydown', handleKeyboardShortcuts);
+    };
+  }, [handleUndo, handleCopyPaste, handleDelete]);
+
   useEffect(() => {
     if (user) {
       // Clear current classes to show feedback immediately (or avoid stale data)
@@ -174,16 +325,11 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, weekStart.getTime()]);
 
-  const timeToMinutes = (timeStr) => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
+
+  const pushHistory = () => {
+    setHistory(h => [...h.slice(-19), [...scheduleClasses]]); // keep last 20 states
   };
 
-  const formatTimeFromMinutes = (mins) => {
-    const h = Math.floor(mins / 60);
-    const m = Math.floor(mins % 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:00`;
-  };
 
   const getClassesForDay = (dayIndex) => {
     return scheduleClasses
@@ -562,6 +708,8 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                         }}
                         data-testid="calendar-class-item"
                         data-class-block="true"
+                        onMouseEnter={() => setHoveredItem({ type: 'class', data: cls })}
+                        onMouseLeave={() => setHoveredItem(null)}
                         draggable={!isResizing}
                         onDragStart={(e) => {
                           if (isResizing) {
@@ -759,7 +907,15 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
                         height: `${event.height}px`
                       }}
                       data-testid="calendar-event-item"
+                      data-event-block="true"
+                      onMouseEnter={() => setHoveredItem({ type: 'event', data: event })}
+                      onMouseLeave={() => setHoveredItem(null)}
                       draggable={true}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingEvent(event);
+                        setShowEventModal(true);
+                      }}
                       onDragStart={(e) => {
                         let durationMinutes = 60; // fallback
                         if (event.start_time && event.end_time) {
@@ -806,10 +962,27 @@ const NewWeeklyCalendar = ({ onSubjectClick }) => {
       )}
       {showEventModal && (
         <AddEventModal
-          onClose={() => setShowEventModal(false)}
+          editingEvent={editingEvent}
+          onClose={() => {
+            setShowEventModal(false);
+            setEditingEvent(null);
+          }}
           onSuccess={loadData}
         />
       )}
+      {/* Modal overlays */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDeletingItem(null);
+        }}
+        onConfirm={handleDelete}
+        title={deletingItem?.type === 'class' ? '¿Eliminar clase?' : '¿Eliminar evento?'}
+        description={deletingItem?.type === 'class' 
+          ? `Se eliminará esta sesión de ${deletingItem.data.subject?.name} del horario.` 
+          : `"${deletingItem?.data.title}" se eliminará del horario.`}
+      />
     </div>
   );
 };

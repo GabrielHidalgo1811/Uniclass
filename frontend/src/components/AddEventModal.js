@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 const DAYS = [
   { label: 'Lunes', value: 1 },
@@ -97,15 +98,42 @@ const TimePicker = ({ value, onChange, label, id }) => {
   );
 };
 
-const AddEventModal = ({ onClose, onSuccess }) => {
+const AddEventModal = ({ onClose, onSuccess, editingEvent = null }) => {
   const { user } = useAuth();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [dayOfWeek, setDayOfWeek] = useState('1');
-  const [startTime, setStartTime] = useState('08:00');
-  const [endTime, setEndTime] = useState('09:00');
-  const [isFixed, setIsFixed] = useState(false);
+  const [title, setTitle] = useState(editingEvent?.title || '');
+  const [description, setDescription] = useState(editingEvent?.description || '');
+  const [dayOfWeek, setDayOfWeek] = useState(editingEvent ? editingEvent.day_of_week?.toString() : '1');
+  const [startTime, setStartTime] = useState(editingEvent?.start_time?.substring(0, 5) || '08:00');
+  const [endTime, setEndTime] = useState(editingEvent?.end_time?.substring(0, 5) || '09:00');
+  const [isFixed, setIsFixed] = useState(editingEvent?.is_fixed || false);
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleDelete = async () => {
+    if (!editingEvent) return;
+
+    setDeleteLoading(true);
+    try {
+      const { error } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', editingEvent.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast.success('Evento eliminado');
+      onSuccess();
+      onClose();
+    } catch (error) {
+      console.error(error);
+      toast.error('Error al eliminar evento');
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteConfirm(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -132,38 +160,52 @@ const AddEventModal = ({ onClose, onSuccess }) => {
       const [endHour, endMinute] = actualEndTime.split(':');
       endTimestamp.setHours(parseInt(endHour), parseInt(endMinute), 0, 0);
 
-      const { error } = await supabase
-        .from('events')
-        .insert([{
-          user_id: user.id,
-          title,
-          description: description || null,
-          day_of_week: parseInt(dayOfWeek),
-          start_time: startTime,
-          end_time: actualEndTime,
-          is_fixed: isFixed,
-          start_timestamp: startTimestamp.toISOString(),
-          end_timestamp: endTimestamp.toISOString()
-        }]);
+      const eventData = {
+        user_id: user.id,
+        title,
+        description: description || null,
+        day_of_week: parseInt(dayOfWeek),
+        start_time: startTime,
+        end_time: actualEndTime,
+        is_fixed: isFixed,
+        start_timestamp: startTimestamp.toISOString(),
+        end_timestamp: endTimestamp.toISOString()
+      };
+
+      let error;
+      if (editingEvent) {
+        const { error: updateError } = await supabase
+          .from('events')
+          .update(eventData)
+          .eq('id', editingEvent.id)
+          .eq('user_id', user.id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('events')
+          .insert([eventData]);
+        error = insertError;
+      }
 
       if (error) throw error;
 
-      toast.success(isFixed ? 'Evento anclado creado' : 'Evento creado exitosamente');
+      toast.success(editingEvent ? 'Evento actualizado' : (isFixed ? 'Evento anclado creado' : 'Evento creado exitosamente'));
       onSuccess();
       onClose();
     } catch (error) {
       console.error(error);
-      toast.error(error.message || 'Error al agregar evento');
+      toast.error(error.message || 'Error al guardar evento');
     } finally {
       setLoading(false);
     }
   };
 
   return (
+    <>
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Agregar Evento</DialogTitle>
+          <DialogTitle>{editingEvent ? 'Editar Evento' : 'Agregar Evento'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -235,17 +277,40 @@ const AddEventModal = ({ onClose, onSuccess }) => {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Guardando...' : 'Agregar'}
-            </Button>
-          </DialogFooter>
+            <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-4">
+              {editingEvent && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={deleteLoading}
+                  className="sm:mr-auto transition-all active:scale-95"
+                >
+                  {deleteLoading ? 'Eliminando...' : 'Eliminar'}
+                </Button>
+              )}
+              <div className="flex gap-2 sm:ml-auto">
+                <Button type="button" variant="outline" onClick={onClose} className="rounded-xl border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={loading} className="px-8 bg-black hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 rounded-xl transition-all active:scale-95 shadow-lg shadow-black/5 dark:shadow-white/5">
+                  {loading ? 'Guardando...' : (editingEvent ? 'Guardar Cambios' : 'Agregar Evento')}
+                </Button>
+              </div>
+            </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+
+    <DeleteConfirmationModal
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      onConfirm={handleDelete}
+      loading={deleteLoading}
+      title="¿Eliminar evento?"
+      description={`"${title}" se eliminará permanentemente del horario.`}
+    />
+    </>
   );
 };
 
