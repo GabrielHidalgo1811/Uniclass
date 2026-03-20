@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from '@/lib/googleCalendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -136,6 +137,8 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
     }
 
     try {
+      const { data: currentGrade } = await supabase.from('grades').select('google_event_id, title').eq('id', gradeId).single();
+
       const { error } = await supabase
         .from('grades')
         .update({
@@ -147,8 +150,44 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      if (parsedDate) {
+        try {
+          const endDateObj = new Date(parsedDate + 'T00:00:00');
+          endDateObj.setDate(endDateObj.getDate() + 1);
+          const endParsedDate = endDateObj.toISOString().split('T')[0];
+
+          const eventDetails = {
+            summary: `[Uniclass] ${subject?.name || 'Asignatura'} - ${currentGrade?.title || 'Evaluación'}`,
+            description: `Evaluación de ${subject?.name || 'Asignatura'} (Peso: ${draft.weight}%)`,
+            start: { date: parsedDate },
+            end: { date: endParsedDate }
+          };
+
+          if (currentGrade?.google_event_id) {
+            await updateGoogleCalendarEvent(currentGrade.google_event_id, eventDetails);
+          } else {
+            const newGoogleId = await createGoogleCalendarEvent(eventDetails);
+            const { error: gError } = await supabase.from('grades').update({ google_event_id: newGoogleId }).eq('id', gradeId);
+            if (gError) console.warn("Uniclass: Debes añadir la columna google_event_id en la base de datos.");
+          }
+        } catch (gcalError) {
+          console.error("Fallo al sincronizar con Google:", gcalError);
+          toast.error("Error GCal: " + (gcalError.message || 'Desconocido'));
+        }
+      } else if (currentGrade?.google_event_id) {
+        try {
+          await deleteGoogleCalendarEvent(currentGrade.google_event_id);
+          await supabase.from('grades').update({ google_event_id: null }).eq('id', gradeId);
+        } catch (e) {
+          console.error("Fallo al borrar de Google:", e);
+          toast.error("Error GCal Borrado: " + (e.message || 'Desconocido'));
+        }
+      }
+
       toast.success('Cambios guardados correctamente');
       loadSubjectData();
+      window.dispatchEvent(new Event('refreshSidebar'));
     } catch (error) {
       toast.error('Error al guardar cambios');
     }
@@ -172,6 +211,7 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
       if (error) throw error;
       toast.success('Prueba agregada');
       loadSubjectData();
+      window.dispatchEvent(new Event('refreshSidebar'));
     } catch (error) {
       toast.error('Error al agregar prueba');
     }
@@ -179,6 +219,8 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
 
   const deleteGrade = async (gradeId) => {
     try {
+      const { data: currentGrade } = await supabase.from('grades').select('google_event_id').eq('id', gradeId).single();
+
       const { error } = await supabase
         .from('grades')
         .delete()
@@ -186,8 +228,18 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      if (currentGrade?.google_event_id) {
+        try {
+          await deleteGoogleCalendarEvent(currentGrade.google_event_id);
+        } catch (gcalError) {
+          console.error("Error borrando de Google:", gcalError);
+        }
+      }
+
       toast.success('Prueba eliminada');
       loadSubjectData();
+      window.dispatchEvent(new Event('refreshSidebar'));
     } catch (error) {
       toast.error('Error al eliminar prueba');
     }
@@ -219,6 +271,7 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
       setAddingTopicForGrade(null);
       setNewTopicText('');
       loadSubjectData();
+      window.dispatchEvent(new Event('refreshSidebar'));
     } catch (error) {
       toast.error('Error al agregar tema');
     }
@@ -234,6 +287,7 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
 
       if (error) throw error;
       loadSubjectData();
+      window.dispatchEvent(new Event('refreshSidebar'));
     } catch (error) {
       toast.error('Error al actualizar tema');
     }
@@ -250,6 +304,7 @@ const SubjectDetail = ({ subjectId, onBack, initialExpandedExam }) => {
       if (error) throw error;
       toast.success('Tema eliminado');
       loadSubjectData();
+      window.dispatchEvent(new Event('refreshSidebar'));
     } catch (error) {
       toast.error('Error al eliminar tema');
     }

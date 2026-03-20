@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from '@/lib/googleCalendar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -111,10 +112,12 @@ const AddEventModal = ({ onClose, onSuccess, editingEvent = null }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleDelete = async () => {
-    if (!editingEvent) return;
+    if (!editingEvent || !user) return;
 
     setDeleteLoading(true);
     try {
+      const { data: currentEvent } = await supabase.from('events').select('google_event_id').eq('id', editingEvent.id).single();
+
       const { error } = await supabase
         .from('events')
         .delete()
@@ -122,6 +125,14 @@ const AddEventModal = ({ onClose, onSuccess, editingEvent = null }) => {
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      if (currentEvent?.google_event_id) {
+        try {
+          await deleteGoogleCalendarEvent(currentEvent.google_event_id);
+        } catch (e) {
+          console.error("Fallo borrando de Google:", e);
+        }
+      }
 
       toast.success('Evento eliminado');
       onSuccess();
@@ -172,7 +183,7 @@ const AddEventModal = ({ onClose, onSuccess, editingEvent = null }) => {
         end_timestamp: endTimestamp.toISOString()
       };
 
-      let error;
+      let error, finalEventId;
       if (editingEvent) {
         const { error: updateError } = await supabase
           .from('events')
@@ -180,14 +191,70 @@ const AddEventModal = ({ onClose, onSuccess, editingEvent = null }) => {
           .eq('id', editingEvent.id)
           .eq('user_id', user.id);
         error = updateError;
+        if (!error) finalEventId = editingEvent.id;
       } else {
-        const { error: insertError } = await supabase
+        const { data: insertedEvent, error: insertError } = await supabase
           .from('events')
-          .insert([eventData]);
+          .insert([eventData])
+          .select()
+          .single();
         error = insertError;
+        if (insertedEvent) finalEventId = insertedEvent.id;
       }
 
       if (error) throw error;
+
+      // Google Calendar Sync
+      try {
+        const getNextDateForDayOfWeek = (dow) => {
+          const today = new Date();
+          const currentDay = today.getDay() || 7;
+          const diff = dow - currentDay;
+          const targetDate = new Date(today);
+          targetDate.setDate(today.getDate() + (diff >= 0 ? diff : diff + 7));
+          return targetDate.toISOString().split('T')[0];
+        };
+
+        let gcalStart, gcalEnd, recurrenceRule;
+
+        if (isFixed) {
+          const dateStr = getNextDateForDayOfWeek(parseInt(dayOfWeek));
+          gcalStart = { dateTime: `${dateStr}T${startTime}:00`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago' };
+          gcalEnd = { dateTime: `${dateStr}T${actualEndTime}:00`, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago' };
+          recurrenceRule = ["RRULE:FREQ=WEEKLY"];
+        } else {
+          // Un evento de fecha exacta (basado en start_timestamp)
+          const isoStart = startTimestamp.toISOString().split('.')[0] + 'Z';
+          const isoEnd = endTimestamp.toISOString().split('.')[0] + 'Z';
+          gcalStart = { dateTime: isoStart };
+          gcalEnd = { dateTime: isoEnd };
+        }
+
+        const gcalDetails = {
+          summary: `[Uniclass] ${title}`,
+          description: description || '',
+          start: gcalStart,
+          end: gcalEnd,
+          ...(recurrenceRule ? { recurrence: recurrenceRule } : {})
+        };
+
+        if (editingEvent) {
+           const { data: currentEv } = await supabase.from('events').select('google_event_id').eq('id', editingEvent.id).single();
+           if (currentEv?.google_event_id) {
+             await updateGoogleCalendarEvent(currentEv.google_event_id, gcalDetails);
+           } else {
+             const newGId = await createGoogleCalendarEvent(gcalDetails);
+             const { error: gError } = await supabase.from('events').update({ google_event_id: newGId }).eq('id', editingEvent.id);
+             if (gError) console.warn("Uniclass: Falta columna google_event_id en events.");
+           }
+        } else {
+           const newGId = await createGoogleCalendarEvent(gcalDetails);
+           const { error: gError } = await supabase.from('events').update({ google_event_id: newGId }).eq('id', finalEventId);
+           if (gError) console.warn("Uniclass: Falta columna google_event_id en events.");
+        }
+      } catch (gcalError) {
+        console.error("Fallo sincronizando evt en Google:", gcalError);
+      }
 
       toast.success(editingEvent ? 'Evento actualizado' : (isFixed ? 'Evento anclado creado' : 'Evento creado exitosamente'));
       onSuccess();

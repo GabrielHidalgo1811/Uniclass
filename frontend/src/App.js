@@ -1,5 +1,5 @@
 import '@/App.css';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { Toaster } from 'sonner';
 import { useState } from 'react';
@@ -29,33 +29,37 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function Dashboard() {
-  const [currentView, setCurrentView] = useState('horario');
-  const [selectedSubject, setSelectedSubject] = useState(null);
-  const [selectedExam, setSelectedExam] = useState(null);
-  const [showReminders, setShowReminders] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const currentView = searchParams.get('view') || 'horario';
+  const selectedSubject = searchParams.get('subject') || null;
+  const selectedExam = searchParams.get('exam') || null;
+  const showReminders = searchParams.get('reminders') === 'true';
 
   const handleNavigate = (view) => {
-    setCurrentView(view);
-    setSelectedSubject(null);
-    setSelectedExam(null);
-    setShowReminders(false);
+    setSearchParams({ view });
   };
 
   const handleSelectSubject = (subjectId) => {
-    setSelectedSubject(subjectId);
-    setSelectedExam(null);
-    setShowReminders(false);
+    setSearchParams({ view: currentView, subject: subjectId });
   };
 
   const handleSelectExam = (subjectId, examId) => {
-    setSelectedSubject(subjectId);
-    setSelectedExam(examId);
-    setShowReminders(false);
+    setSearchParams({ view: currentView, subject: subjectId, exam: examId });
   };
 
   const handleBackFromSubject = () => {
-    setSelectedSubject(null);
-    setSelectedExam(null);
+    setSearchParams({ view: currentView });
+  };
+
+  const setShowReminders = (show) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (show) {
+      nextParams.set('reminders', 'true');
+    } else {
+      nextParams.delete('reminders');
+    }
+    setSearchParams(nextParams);
   };
 
   return (

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from '@/lib/googleCalendar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -158,6 +159,47 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
           .eq('user_id', user.id);
 
         if (classError) throw classError;
+
+        // Sync with Google Calendar
+        try {
+          const getNextDateForDayOfWeek = (dow) => {
+            const today = new Date();
+            const currentDay = today.getDay() || 7;
+            const diff = dow - currentDay;
+            const targetDate = new Date(today);
+            targetDate.setDate(today.getDate() + diff);
+            return targetDate.toISOString().split('T')[0];
+          };
+
+          const dateStr = getNextDateForDayOfWeek(parseInt(selectedDay));
+          const eventDetails = {
+            summary: `[Uniclass] ${name.trim()} - ${classType}`,
+            description: `Sala: ${room || 'No especificada'}\nProfesor: ${professor || 'No especificado'}`,
+            start: {
+              dateTime: `${dateStr}T${startTime}:00`,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago'
+            },
+            end: {
+              dateTime: `${dateStr}T${endTime}:00`,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago'
+            },
+            recurrence: ["RRULE:FREQ=WEEKLY"]
+          };
+
+          const { data: currentClass } = await supabase.from('schedule_classes').select('google_event_id').eq('id', editingClass.id).single();
+          
+          if (currentClass?.google_event_id) {
+            await updateGoogleCalendarEvent(currentClass.google_event_id, eventDetails);
+          } else {
+            const newGoogleId = await createGoogleCalendarEvent(eventDetails);
+            const { error: gError } = await supabase.from('schedule_classes').update({ google_event_id: newGoogleId }).eq('id', editingClass.id);
+            if (gError) console.warn("Uniclass: Falta columna google_event_id en tabla schedule_classes.");
+          }
+        } catch (gcalError) {
+          console.error("Fallo al actualizar en Google:", gcalError);
+          toast.error("GCal Error: " + (gcalError.message || 'Desconocido'));
+        }
+
         toast.success('Clase actualizada');
       } else {
         // Create new or Reuse existing subject
@@ -207,7 +249,7 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
           await supabase.from('grades').insert(grades);
         }
 
-        const { error: classError } = await supabase
+        const { data: insertedClass, error: classError } = await supabase
           .from('schedule_classes')
           .insert([{
             user_id: user.id,
@@ -218,9 +260,46 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
             room: room || null,
             professor: professor || null,
             class_type: classType
-          }]);
+          }])
+          .select()
+          .single();
 
         if (classError) throw classError;
+
+        // Sync with Google Calendar
+        try {
+          const getNextDateForDayOfWeek = (dow) => {
+            const today = new Date();
+            const currentDay = today.getDay() || 7;
+            const diff = dow - currentDay;
+            const targetDate = new Date(today);
+            targetDate.setDate(today.getDate() + diff);
+            return targetDate.toISOString().split('T')[0];
+          };
+
+          const dateStr = getNextDateForDayOfWeek(parseInt(selectedDay));
+          const eventDetails = {
+            summary: `[Uniclass] ${name.trim()} - ${classType}`,
+            description: `Sala: ${room || 'No especificada'}\nProfesor: ${professor || 'No especificado'}`,
+            start: {
+              dateTime: `${dateStr}T${startTime}:00`,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago'
+            },
+            end: {
+              dateTime: `${dateStr}T${endTime}:00`,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Santiago'
+            },
+            recurrence: ["RRULE:FREQ=WEEKLY"]
+          };
+          
+          const newGoogleId = await createGoogleCalendarEvent(eventDetails);
+          const { error: gError } = await supabase.from('schedule_classes').update({ google_event_id: newGoogleId }).eq('id', insertedClass.id);
+          if (gError) console.warn("Uniclass: Falta columna google_event_id en tabla schedule_classes.");
+        } catch (gcalError) {
+          console.error("Fallo al crear en Google:", gcalError);
+          toast.error("GCal Error: " + (gcalError.message || 'Desconocido'));
+        }
+
         toast.success('Clase agregada exitosamente');
       }
 
@@ -239,6 +318,8 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
     
     setLoading(true);
     try {
+      const { data: currentClass } = await supabase.from('schedule_classes').select('google_event_id').eq('id', editingClass.id).single();
+
       const { error } = await supabase
         .from('schedule_classes')
         .delete()
@@ -246,6 +327,13 @@ const AddClassModal = ({ onClose, onSuccess, initialDay = '1', initialStartTime 
         .eq('user_id', user.id);
 
       if (error) throw error;
+
+      if (currentClass?.google_event_id) {
+        try {
+          await deleteGoogleCalendarEvent(currentClass.google_event_id);
+        } catch (e) { console.error("Fallo borrar Google cal", e); }
+      }
+
       toast.success('Clase eliminada');
       onSuccess();
       onClose();

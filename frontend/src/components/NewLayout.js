@@ -43,6 +43,13 @@ const NewLayout = ({ children, currentView, onNavigate, onSelectExam, showRemind
     if (user) {
       loadSidebarData();
     }
+    
+    const handleRefresh = () => {
+      if (user) loadSidebarData();
+    };
+    
+    window.addEventListener('refreshSidebar', handleRefresh);
+    return () => window.removeEventListener('refreshSidebar', handleRefresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -255,8 +262,8 @@ const NewLayout = ({ children, currentView, onNavigate, onSelectExam, showRemind
               onClick={toggleDarkMode}
               title={isDarkMode ? "Modo Claro" : "Modo Oscuro"}
             >
-              {isDarkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              {(!isCollapsed || isMobileOpen) && <span className="ml-2">{isDarkMode ? 'Claro' : 'Oscuro'}</span>}
+              {isDarkMode ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+              {(!isCollapsed || isMobileOpen) && <span className="ml-2">{isDarkMode ? 'Oscuro' : 'Claro'}</span>}
             </Button>
 
             <Button
